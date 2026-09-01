@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState, type DragEvent as ReactDragEvent } from 'react'
 import {
   addEdge,
   Background,
@@ -11,7 +11,7 @@ import {
   type Edge,
   type Node,
 } from '@xyflow/react'
-import { Bot, CircleStop, GitBranch, MessageSquareText, MousePointerClick, Play, Plus, Save, Trash2, UploadCloud, Variable } from 'lucide-react'
+import { Bot, CircleStop, Download, FileUp, GitBranch, MessageSquareText, MousePointerClick, Play, Plus, Save, Trash2, UploadCloud, Variable } from 'lucide-react'
 import IvrNode from './IvrNode'
 import type { FlowDefinition, FlowNode, NodeKind } from '../types'
 
@@ -19,8 +19,11 @@ interface Props {
   flow: FlowDefinition
   onSave: (flow: FlowDefinition) => Promise<void>
   onPublish: (flow: FlowDefinition) => Promise<void>
+  onExport: (flow: FlowDefinition) => void
+  onImport: (file: File) => Promise<void>
   saving: boolean
   publishing: boolean
+  importing: boolean
   publishedVersion: number | null
 }
 
@@ -37,13 +40,15 @@ function toRfNode(n: FlowNode): Node {
   return { id: n.id, type: 'ivr', position: { x: n.x, y: n.y }, data: { label: n.label, kind: n.type, config: n.config } }
 }
 
-export default function FlowEditor({ flow, onSave, onPublish, saving, publishing, publishedVersion }: Props) {
+export default function FlowEditor({ flow, onSave, onPublish, onExport, onImport, saving, publishing, importing, publishedVersion }: Props) {
   const [nodes, setNodes, onNodesChange] = useNodesState(flow.nodes.map(toRfNode))
   const [edges, setEdges, onEdgesChange] = useEdgesState(
     flow.edges.map(e => ({ id: e.id, source: e.source, target: e.target, label: e.label || e.condition || undefined, data: { condition: e.condition } })),
   )
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
+  const importInput = useRef<HTMLInputElement>(null)
+  const [toFlowPosition, setToFlowPosition] = useState<((position: { x: number; y: number }) => { x: number; y: number }) | null>(null)
   const nodeTypes = useMemo(() => ({ ivr: IvrNode }), [])
   const selected = nodes.find(n => n.id === selectedId)
   const selectedEdge = edges.find(e => e.id === selectedEdgeId)
@@ -52,7 +57,7 @@ export default function FlowEditor({ flow, onSave, onPublish, saving, publishing
     setEdges(eds => addEdge({ ...connection, id: `e-${crypto.randomUUID()}` }, eds))
   }, [setEdges])
 
-  const addNode = (kind: NodeKind) => {
+  const addNode = (kind: NodeKind, position?: { x: number; y: number }) => {
     const id = `${kind}-${crypto.randomUUID().slice(0, 8)}`
     const defaults: Record<NodeKind, Record<string, unknown>> = {
       start: {},
@@ -66,12 +71,19 @@ export default function FlowEditor({ flow, onSave, onPublish, saving, publishing
     const node: Node = {
       id,
       type: 'ivr',
-      position: { x: 420 + (nodes.length % 3) * 40, y: 120 + (nodes.length % 7) * 60 },
+      position: position ?? { x: 420 + (nodes.length % 3) * 40, y: 120 + (nodes.length % 7) * 60 },
       data: { label: palette.find(p => p.type === kind)?.label || kind, kind, config: defaults[kind] },
     }
     setNodes(items => [...items, node])
     setSelectedId(id)
     setSelectedEdgeId(null)
+  }
+
+  const dropNode = (event: ReactDragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    const kind = event.dataTransfer.getData('application/revelys-node-kind') as NodeKind
+    if (!toFlowPosition || !palette.some(item => item.type === kind)) return
+    addNode(kind, toFlowPosition({ x: event.clientX, y: event.clientY }))
   }
 
   const updateSelected = (field: 'label' | 'config', value: unknown) => {
@@ -125,7 +137,7 @@ export default function FlowEditor({ flow, onSave, onPublish, saving, publishing
         <div className="section-title"><Plus size={15} /> Nodes</div>
         {palette.map(item => {
           const Icon = item.icon
-          return <button key={item.type} className="palette-btn" onClick={() => addNode(item.type)}><Icon size={16} /><span>{item.label}</span></button>
+          return <button key={item.type} className="palette-btn" draggable onDragStart={event => { event.dataTransfer.setData('application/revelys-node-kind', item.type); event.dataTransfer.effectAllowed = 'copy' }} onClick={() => addNode(item.type)}><Icon size={16} /><span>{item.label}</span></button>
         })}
         <div className="palette-note"><Play size={14} /> Start nodes are intentionally unique. Use the seeded one.</div>
       </aside>
@@ -134,8 +146,21 @@ export default function FlowEditor({ flow, onSave, onPublish, saving, publishing
         <div className="canvas-toolbar">
           <div><strong>{flow.name}</strong><span>{nodes.length} nodes · {edges.length} edges · published v{publishedVersion ?? '—'}</span></div>
           <div className="toolbar-actions">
-            <button className="secondary-btn" disabled={saving || publishing} onClick={() => onSave(buildFlow())}><Save size={16} />{saving ? 'Saving…' : 'Save draft'}</button>
-            <button className="primary-btn" disabled={saving || publishing} onClick={() => onPublish(buildFlow())}><UploadCloud size={16} />{publishing ? 'Publishing…' : 'Publish'}</button>
+            <input
+              ref={importInput}
+              className="file-input"
+              type="file"
+              accept="application/json,.json"
+              onChange={event => {
+                const file = event.target.files?.[0]
+                if (file) void onImport(file)
+                event.target.value = ''
+              }}
+            />
+            <button className="icon-btn" title="Import flow JSON" aria-label="Import flow JSON" disabled={saving || publishing || importing} onClick={() => importInput.current?.click()}><FileUp size={16} /></button>
+            <button className="icon-btn" title="Export flow JSON" aria-label="Export flow JSON" disabled={saving || publishing || importing} onClick={() => onExport(buildFlow())}><Download size={16} /></button>
+            <button className="secondary-btn" disabled={saving || publishing || importing} onClick={() => onSave(buildFlow())}><Save size={16} />{saving ? 'Saving…' : 'Save draft'}</button>
+            <button className="primary-btn" disabled={saving || publishing || importing} onClick={() => onPublish(buildFlow())}><UploadCloud size={16} />{publishing ? 'Publishing…' : 'Publish'}</button>
           </div>
         </div>
         <div className="flow-area">
@@ -145,6 +170,9 @@ export default function FlowEditor({ flow, onSave, onPublish, saving, publishing
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
+            onInit={instance => setToFlowPosition(() => (position: { x: number; y: number }) => instance.screenToFlowPosition(position))}
+            onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy' }}
+            onDrop={dropNode}
             onNodeClick={(_, node) => { setSelectedId(node.id); setSelectedEdgeId(null) }}
             onEdgeClick={(_, edge) => { setSelectedEdgeId(edge.id); setSelectedId(null) }}
             onPaneClick={() => { setSelectedId(null); setSelectedEdgeId(null) }}

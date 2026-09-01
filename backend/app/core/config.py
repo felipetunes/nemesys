@@ -5,13 +5,14 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_name: str = "Revelys"
-    database_url: str = "sqlite:///./data/smart_ivr.db"
+    database_url: str = "sqlite:///./data/revelys.db"
     cors_origins: str = "http://localhost:5173"
     openai_api_key: str | None = None
     openai_model: str = "gpt-5.6-luna"
     twilio_auth_token: str | None = None
     twilio_validate_signatures: bool = False
     public_base_url: str = "http://localhost:8000"
+    admin_api_key: str | None = None
 
     model_config = SettingsConfigDict(env_file="../.env", env_file_encoding="utf-8", extra="ignore")
 

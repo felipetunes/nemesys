@@ -1,6 +1,10 @@
 # Revelys
 
-**Current project version: `0.2.0` — stabilization release**
+[![CI](https://github.com/felipetunes/revelys/actions/workflows/ci.yml/badge.svg)](https://github.com/felipetunes/revelys/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/felipetunes/revelys)](https://github.com/felipetunes/revelys/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-7c5cff.svg)](LICENSE)
+
+**Current project version: `0.3.0` — portability and production profile**
 
 **A visual, AI-assisted IVR flow builder and runtime for learning, prototyping and portfolio demos.**
 
@@ -24,6 +28,9 @@ Traditional IVRs are often built inside proprietary platforms. Revelys exposes t
 - Dockerized local environment;
 - immutable published flow versions and durable SQL-backed sessions;
 - automated backend and frontend quality checks.
+- portable flow import/export with server-side validation;
+- optional bearer-token protection for flow mutations;
+- Alembic migrations and a PostgreSQL + Redis production profile.
 
 ## Demo flow
 
@@ -166,6 +173,8 @@ GET    /api/flows
 GET    /api/flows/{flow_id}
 PUT    /api/flows/{flow_id}
 POST   /api/flows/actions/validate
+POST   /api/flows/actions/import
+GET    /api/flows/{flow_id}/export
 GET    /api/flows/{flow_id}/versions
 GET    /api/flows/{flow_id}/versions/{version}
 POST   /api/flows/{flow_id}/publish
@@ -200,6 +209,14 @@ revelys/
 
 See [`docs/architecture.md`](docs/architecture.md), [`docs/flow-spec.md`](docs/flow-spec.md), [`docs/telephony.md`](docs/telephony.md) and [`docs/using-with-codex.md`](docs/using-with-codex.md).
 
+## Management API protection
+
+Set `ADMIN_API_KEY` to require a bearer token when importing, saving or publishing flows. Leave it empty for the fully offline demo. The editor's **Access** button stores the token only for the current browser tab.
+
+## Production profile
+
+See [`docs/production.md`](docs/production.md) for the PostgreSQL, Redis and Alembic deployment profile.
+
 ## Roadmap
 
 - [x] Visual node editor
@@ -211,16 +228,16 @@ See [`docs/architecture.md`](docs/architecture.md), [`docs/flow-spec.md`](docs/f
 - [x] Twilio-style voice adapter
 - [x] Docker Compose
 - [x] CI workflow
-- [ ] PostgreSQL production profile
+- [x] PostgreSQL production profile
 - [ ] Authentication / workspaces
 - [x] Versioned flow publishing
 - [ ] Audio TTS/STT provider abstraction
 - [ ] Queue/agent simulator
 - [ ] Metrics dashboard
-- [ ] Drag-to-add node palette
+- [x] Drag-to-add node palette
 - [x] Backend flow validation
 - [x] Flow validation UI
-- [ ] Export/import flow JSON
+- [x] Export/import flow JSON
 
 ## Security notes
 

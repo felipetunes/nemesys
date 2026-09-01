@@ -14,11 +14,13 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r backend/requirements-dev.txt
-      - run: ruff check app tests
+      - run: ruff check app tests alembic
         working-directory: backend
       - run: mypy app
         working-directory: backend
       - run: pytest -q --cov=app --cov-report=term-missing --cov-fail-under=80
+        working-directory: backend
+      - run: python -m compileall -q app tests alembic
         working-directory: backend
 
   frontend:
@@ -32,5 +34,11 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
         working-directory: frontend
-      - run: npm run build
+      - run: npm run check
         working-directory: frontend
+
+  containers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose --env-file env.production.example -f docker-compose.production.yml build

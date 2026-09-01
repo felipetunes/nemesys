@@ -11,6 +11,7 @@ from app.core.db import Base
 
 NodeType = Literal["start", "prompt", "collect_input", "ai_intent", "decision", "set_variable", "end"]
 VariableName = Annotated[str, Field(min_length=1, max_length=120, pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")]
+FlowIdentifier = Annotated[str, Field(min_length=1, max_length=120, pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]*$")]
 
 
 class StrictModel(BaseModel):
@@ -107,7 +108,7 @@ class FlowEdge(StrictModel):
 
 
 class FlowDefinition(StrictModel):
-    id: str
+    id: FlowIdentifier
     name: str
     description: str = ""
     nodes: list[FlowNode]
@@ -161,7 +162,7 @@ class CallSession(StrictModel):
 
 
 class SessionCreate(StrictModel):
-    flow_id: str
+    flow_id: FlowIdentifier
     flow_version: int | None = Field(default=None, ge=1)
     initial_variables: dict[str, Any] = Field(default_factory=dict)
 

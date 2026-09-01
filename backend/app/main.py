@@ -28,7 +28,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     yield
 
 
-app = FastAPI(title=settings.app_name, version="0.2.0", lifespan=lifespan)
+app = FastAPI(title=settings.app_name, version="0.3.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
@@ -47,4 +47,5 @@ def health() -> dict[str, Any]:
         "status": "ok",
         "ai_mode": "openai" if settings.openai_api_key else "local-fallback",
         "model": settings.openai_model if settings.openai_api_key else None,
+        "management_api_protected": bool(settings.admin_api_key),
     }

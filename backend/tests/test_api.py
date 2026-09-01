@@ -3,6 +3,7 @@ import pytest
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import sessionmaker
 
+from app.core.config import get_settings
 from app.core.db import Base, get_db
 from app.demo_flow import build_demo_flow
 from app.main import app
@@ -98,3 +99,56 @@ async def test_flow_validation_rejects_invalid_node_config(api_client):
     response = await client.post("/api/flows/actions/validate", json=invalid)
 
     assert response.status_code == 422
+
+
+@pytest.mark.anyio
+async def test_flow_export_is_portable(api_client):
+    client, _ = api_client
+
+    response = await client.get("/api/flows/demo-commerce/export")
+
+    assert response.status_code == 200
+    assert response.headers["content-disposition"] == 'attachment; filename="demo-commerce.flow.json"'
+    exported = response.json()
+    assert exported["id"] == "demo-commerce"
+    assert "version" not in exported
+    assert "published_at" not in exported
+    assert "updated_at" not in exported
+
+
+@pytest.mark.anyio
+async def test_flow_import_requires_explicit_overwrite(api_client):
+    client, _ = api_client
+    imported = build_demo_flow().model_copy(update={"id": "imported-commerce", "name": "Imported commerce"})
+
+    created = await client.post("/api/flows/actions/import", json=imported.model_dump(mode="json"))
+    duplicate = await client.post("/api/flows/actions/import", json=imported.model_dump(mode="json"))
+    overwritten = await client.post(
+        "/api/flows/actions/import?overwrite=true",
+        json=imported.model_copy(update={"name": "Updated import"}).model_dump(mode="json"),
+    )
+
+    assert created.status_code == 201
+    assert duplicate.status_code == 409
+    assert overwritten.status_code == 201
+    assert overwritten.json()["name"] == "Updated import"
+
+
+@pytest.mark.anyio
+async def test_management_token_protects_flow_mutations(api_client, monkeypatch):
+    client, _ = api_client
+    draft = build_demo_flow().model_dump(mode="json")
+    monkeypatch.setenv("ADMIN_API_KEY", "test-management-token")
+    get_settings.cache_clear()
+    try:
+        rejected = await client.put("/api/flows/demo-commerce", json=draft)
+        accepted = await client.put(
+            "/api/flows/demo-commerce",
+            json=draft,
+            headers={"Authorization": "Bearer test-management-token"},
+        )
+    finally:
+        get_settings.cache_clear()
+
+    assert rejected.status_code == 401
+    assert accepted.status_code == 200

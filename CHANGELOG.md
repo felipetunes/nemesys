@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.3.0 — 2026-08-31
+
+### Added
+
+- Portable JSON flow import and export in both the API and visual editor.
+- Optional bearer-token protection for flow management operations.
+- Alembic migration lifecycle and an initial schema migration.
+- PostgreSQL + Redis production Docker Compose profile.
+- Drag-to-add positioning from the node palette.
+
+### Changed
+
+- Frontend CI now runs lint, tests and the production build.
+- Local database and volume names now use the Revelys identity.
+
 ## 0.2.0 — 2026-08-31
 
 ### Added

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Activity, Bot, Cable, GitBranch, Github, LoaderCircle, Network, PlayCircle, Save } from 'lucide-react'
+import { Activity, Bot, Cable, GitBranch, Github, KeyRound, LoaderCircle, Network, PlayCircle, Save } from 'lucide-react'
 import { api } from './api'
 import FlowEditor from './components/FlowEditor'
 import Simulator from './components/Simulator'
@@ -11,9 +11,11 @@ export default function App() {
   const [tab, setTab] = useState<'editor' | 'simulator' | 'architecture'>('editor')
   const [saving, setSaving] = useState(false)
   const [publishing, setPublishing] = useState(false)
+  const [importing, setImporting] = useState(false)
   const [publishedVersion, setPublishedVersion] = useState<number | null>(null)
   const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
+  const [hasManagementToken, setHasManagementToken] = useState(() => Boolean(window.sessionStorage.getItem('revelys_management_token')))
 
   useEffect(() => {
     Promise.all([api.getFlow('demo-commerce'), api.getFlowVersions('demo-commerce')])
@@ -54,6 +56,43 @@ export default function App() {
     finally { setPublishing(false) }
   }
 
+  const exportFlow = (current: FlowDefinition) => {
+    const portable: FlowDefinition = { ...current, version: null, published_at: null }
+    delete portable.updated_at
+    const href = URL.createObjectURL(new Blob([JSON.stringify(portable, null, 2)], { type: 'application/json' }))
+    const anchor = document.createElement('a')
+    anchor.href = href
+    anchor.download = `${portable.id}.flow.json`
+    anchor.click()
+    URL.revokeObjectURL(href)
+    setNotice('Flow exported successfully.')
+    setTimeout(() => setNotice(''), 2200)
+  }
+
+  const importFlow = async (file: File) => {
+    setImporting(true); setNotice(''); setError('')
+    try {
+      const parsed = JSON.parse(await file.text()) as FlowDefinition
+      const imported = await api.importFlow(parsed, true)
+      setFlow(imported)
+      setPublishedVersion(null)
+      setNotice(`Flow “${imported.name}” imported as a draft.`)
+      setTimeout(() => setNotice(''), 2200)
+    }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)) }
+    finally { setImporting(false) }
+  }
+
+  const configureManagementToken = () => {
+    const token = window.prompt('Management API token (leave empty to clear it):', '')
+    if (token === null) return
+    if (token.trim()) window.sessionStorage.setItem('revelys_management_token', token.trim())
+    else window.sessionStorage.removeItem('revelys_management_token')
+    setHasManagementToken(Boolean(token.trim()))
+    setNotice(token.trim() ? 'Management token set for this browser tab.' : 'Management token cleared.')
+    setTimeout(() => setNotice(''), 2200)
+  }
+
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -63,14 +102,17 @@ export default function App() {
           <button className={tab === 'simulator' ? 'active' : ''} onClick={() => setTab('simulator')}><PlayCircle size={16} />Simulator</button>
           <button className={tab === 'architecture' ? 'active' : ''} onClick={() => setTab('architecture')}><Activity size={16} />Architecture</button>
         </nav>
-        <a className="github-link" href="https://github.com/felipetunes/revelys" target="_blank" rel="noreferrer"><Github size={17} />GitHub</a>
+        <div className="topbar-actions">
+          <button className={`access-btn${hasManagementToken ? ' configured' : ''}`} onClick={configureManagementToken} title="Configure management API token"><KeyRound size={16} />Access</button>
+          <a className="github-link" href="https://github.com/felipetunes/revelys" target="_blank" rel="noreferrer"><Github size={17} />GitHub</a>
+        </div>
       </header>
 
       <main>
         {notice && <div className="toast"><Save size={15} />{notice}</div>}
         {error && <div className="error-box top-error">{error}</div>}
         {!flow && !error && <div className="loading"><LoaderCircle className="spin" />Loading demo flow…</div>}
-        {flow && tab === 'editor' && <FlowEditor flow={flow} onSave={save} onPublish={publish} saving={saving} publishing={publishing} publishedVersion={publishedVersion} />}
+        {flow && tab === 'editor' && <FlowEditor key={`${flow.id}:${flow.updated_at ?? ''}`} flow={flow} onSave={save} onPublish={publish} onExport={exportFlow} onImport={importFlow} saving={saving} publishing={publishing} importing={importing} publishedVersion={publishedVersion} />}
         {flow && tab === 'simulator' && <Simulator flow={flow} />}
         {flow && tab === 'architecture' && <Architecture />}
       </main>
