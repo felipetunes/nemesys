@@ -1,5 +1,5 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react'
-import { Bot, CircleStop, GitBranch, MessageSquareText, MousePointerClick, Play, Variable } from 'lucide-react'
+import { Bot, CircleStop, GitBranch, Headphones, MessageSquareText, MousePointerClick, Play, Variable } from 'lucide-react'
 import type { NodeKind } from '../types'
 
 const icons: Record<NodeKind, typeof Play> = {
@@ -9,6 +9,7 @@ const icons: Record<NodeKind, typeof Play> = {
   ai_intent: Bot,
   decision: GitBranch,
   set_variable: Variable,
+  queue: Headphones,
   end: CircleStop,
 }
 

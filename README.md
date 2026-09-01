@@ -4,11 +4,13 @@
 [![Release](https://img.shields.io/github/v/release/felipetunes/revelys)](https://github.com/felipetunes/revelys/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-7c5cff.svg)](LICENSE)
 
-**Current project version: `0.3.0` — portability and production profile**
+**Current project version: `0.4.0` — operations and workspaces**
 
 **A visual, AI-assisted IVR flow builder and runtime for learning, prototyping and portfolio demos.**
 
-Revelys is a full-stack project that lets you design a call flow visually, run it in a browser simulator, inspect every execution event and optionally connect a real phone number through a Twilio-compatible webhook adapter.
+![Revelys visual IVR editor](docs/assets/editor-preview.svg)
+
+Revelys is a full-stack project that lets you design a call flow visually, run it in a browser simulator, inspect every execution event and optionally connect a real phone number through Twilio or a signed generic webhook adapter.
 
 > The repository is intentionally provider-neutral at its core. The included Twilio adapter is only one example of how a telephony provider can drive the same flow engine.
 
@@ -23,14 +25,19 @@ Traditional IVRs are often built inside proprietary platforms. Revelys exposes t
 - AI intent classification with structured JSON output;
 - fallback classification when no OpenAI key exists;
 - session variables and execution traces;
-- REST APIs and WebSocket-ready event delivery;
+- REST APIs and persisted execution traces;
 - optional real telephony webhook integration;
 - Dockerized local environment;
 - immutable published flow versions and durable SQL-backed sessions;
-- automated backend and frontend quality checks.
+- automated backend and frontend quality checks;
 - portable flow import/export with server-side validation;
 - optional bearer-token protection for flow mutations;
-- Alembic migrations and a PostgreSQL + Redis production profile.
+- Alembic migrations and a PostgreSQL + Redis production profile;
+- user login, revocable tokens and workspace-isolated data;
+- retention controls and persisted-session metrics;
+- a traceable human-agent queue simulator;
+- browser speech controls and telephony speech-provider contracts;
+- a signed, idempotent generic telephony webhook adapter.
 
 ## Demo flow
 
@@ -43,7 +50,7 @@ Start
   -> AI intent classification
       -> order_status -> Order status prompt -> End
       -> cancellation -> Cancellation prompt -> End
-      -> human_agent -> Transfer-like message -> End
+      -> human_agent -> Agent queue -> Simulated agent -> End
       -> fallback -> Clarification prompt -> End
 ```
 
@@ -86,7 +93,7 @@ Start
 - FastAPI
 - SQLAlchemy
 - OpenAI Responses API integration
-- SQLite by default (easy to replace with PostgreSQL)
+- SQLite by default, with a PostgreSQL production profile
 - Pytest
 
 ### Infrastructure
@@ -110,7 +117,7 @@ An OpenAI key is **optional**. Without it, the project uses a deterministic loca
 ```bash
 cd backend
 python -m venv .venv
-source .venv/bin/activate   # Windows: .venv\\Scripts\\activate
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
@@ -178,11 +185,21 @@ GET    /api/flows/{flow_id}/export
 GET    /api/flows/{flow_id}/versions
 GET    /api/flows/{flow_id}/versions/{version}
 POST   /api/flows/{flow_id}/publish
+POST   /api/auth/register
+POST   /api/auth/login
+GET    /api/auth/me
+POST   /api/auth/logout
 POST   /api/sessions
 GET    /api/sessions/{session_id}
 POST   /api/sessions/{session_id}/input
 POST   /api/telephony/twilio/voice
 POST   /api/telephony/twilio/input
+POST   /api/telephony/generic/start
+POST   /api/telephony/generic/{session_id}/input
+GET    /api/queue
+POST   /api/queue/{session_id}/claim
+GET    /api/operations/metrics
+POST   /api/operations/retention/run
 ```
 
 ## Repository structure
@@ -211,11 +228,15 @@ See [`docs/architecture.md`](docs/architecture.md), [`docs/flow-spec.md`](docs/f
 
 ## Management API protection
 
-Set `ADMIN_API_KEY` to require a bearer token when importing, saving or publishing flows. Leave it empty for the fully offline demo. The editor's **Access** button stores the token only for the current browser tab.
+Set `AUTH_REQUIRED=true` to require user or admin bearer tokens. The first registered account becomes the owner of a new isolated workspace; later public registration follows `ALLOW_REGISTRATION`. Tokens are revocable and expire according to `AUTH_SESSION_DAYS`. Leave authentication disabled for the fully offline demo.
+
+The editor's **Access** dialog supports registration and login and stores its token only for the current browser tab. `ADMIN_API_KEY` remains available as a bootstrap/operator credential.
 
 ## Production profile
 
 See [`docs/production.md`](docs/production.md) for the PostgreSQL, Redis and Alembic deployment profile.
+
+Each GitHub release publishes versioned public images to `ghcr.io/felipetunes/revelys-backend` and `ghcr.io/felipetunes/revelys-frontend`.
 
 ## Roadmap
 
@@ -229,11 +250,11 @@ See [`docs/production.md`](docs/production.md) for the PostgreSQL, Redis and Ale
 - [x] Docker Compose
 - [x] CI workflow
 - [x] PostgreSQL production profile
-- [ ] Authentication / workspaces
+- [x] Authentication / workspaces
 - [x] Versioned flow publishing
-- [ ] Audio TTS/STT provider abstraction
-- [ ] Queue/agent simulator
-- [ ] Metrics dashboard
+- [x] Audio TTS/STT provider abstraction
+- [x] Queue/agent simulator
+- [x] Metrics dashboard
 - [x] Drag-to-add node palette
 - [x] Backend flow validation
 - [x] Flow validation UI

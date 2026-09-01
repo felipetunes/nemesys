@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.auth import WorkspaceAccess, require_management_access
 from app.core.db import get_db
 from app.engine.runtime import FlowEngine, FlowEngineError
 from app.models import CallSession, SessionCreate, SessionInput
@@ -12,8 +13,12 @@ engine = FlowEngine()
 
 
 @router.post("", response_model=CallSession)
-def create_session(payload: SessionCreate, db: Session = Depends(get_db)) -> CallSession:
-    flow_repo = FlowRepository(db)
+def create_session(
+    payload: SessionCreate,
+    access: WorkspaceAccess = Depends(require_management_access),
+    db: Session = Depends(get_db),
+) -> CallSession:
+    flow_repo = FlowRepository(db, access.workspace_id)
     flow = (
         flow_repo.get_version(payload.flow_id, payload.flow_version)
         if payload.flow_version is not None
@@ -25,24 +30,33 @@ def create_session(payload: SessionCreate, db: Session = Depends(get_db)) -> Cal
         session = engine.create_session(flow, payload.initial_variables)
     except FlowEngineError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return SessionRepository(db).create(session)
+    return SessionRepository(db, access.workspace_id).create(session)
 
 
 @router.get("/{session_id}", response_model=CallSession)
-def get_session(session_id: str, db: Session = Depends(get_db)) -> CallSession:
-    session = SessionRepository(db).get(session_id)
+def get_session(
+    session_id: str,
+    access: WorkspaceAccess = Depends(require_management_access),
+    db: Session = Depends(get_db),
+) -> CallSession:
+    session = SessionRepository(db, access.workspace_id).get(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     return session
 
 
 @router.post("/{session_id}/input", response_model=CallSession)
-def submit_input(session_id: str, payload: SessionInput, db: Session = Depends(get_db)) -> CallSession:
-    session_repo = SessionRepository(db)
+def submit_input(
+    session_id: str,
+    payload: SessionInput,
+    access: WorkspaceAccess = Depends(require_management_access),
+    db: Session = Depends(get_db),
+) -> CallSession:
+    session_repo = SessionRepository(db, access.workspace_id)
     session = session_repo.get(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
-    flow = FlowRepository(db).get_version(session.flow_id, session.flow_version)
+    flow = FlowRepository(db, access.workspace_id).get_version(session.flow_id, session.flow_version)
     if not flow:
         raise HTTPException(status_code=409, detail="Session flow version no longer exists")
     expected_revision = session.revision

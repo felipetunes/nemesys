@@ -1,3 +1,6 @@
+import hashlib
+import hmac
+
 import httpx
 import pytest
 from sqlalchemy import create_engine, func, select
@@ -9,6 +12,7 @@ from app.demo_flow import build_demo_flow
 from app.main import app
 from app.models import SessionRow
 from app.services.flow_repository import FlowRepository
+from app.telephony import generic_adapter
 
 
 @pytest.fixture
@@ -151,4 +155,133 @@ async def test_management_token_protects_flow_mutations(api_client, monkeypatch)
         get_settings.cache_clear()
 
     assert rejected.status_code == 401
+    assert accepted.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_metrics_endpoint_reports_persisted_activity(api_client):
+    client, _ = api_client
+    created = await client.post("/api/sessions", json={"flow_id": "demo-commerce"})
+    session_id = created.json()["id"]
+    completed = await client.post(f"/api/sessions/{session_id}/input", json={"value": "1"})
+
+    response = await client.get("/api/operations/metrics")
+
+    assert completed.status_code == 200
+    assert response.status_code == 200
+    assert response.json()["total_sessions"] == 1
+    assert response.json()["status_counts"] == {"completed": 1}
+
+
+@pytest.mark.anyio
+async def test_queue_session_can_be_claimed_by_simulated_agent(api_client):
+    client, _ = api_client
+    created = await client.post("/api/sessions", json={"flow_id": "demo-commerce"})
+    session_id = created.json()["id"]
+    queued = await client.post(f"/api/sessions/{session_id}/input", json={"value": "0"})
+
+    waiting = await client.get("/api/queue")
+    claimed = await client.post(f"/api/queue/{session_id}/claim", json={"agent_name": "Test Agent"})
+
+    assert queued.status_code == 200
+    assert queued.json()["status"] == "queued"
+    assert [session["id"] for session in waiting.json()] == [session_id]
+    assert claimed.status_code == 200
+    assert claimed.json()["status"] == "completed"
+    assert claimed.json()["assigned_agent"] == "Test Agent"
+
+
+@pytest.mark.anyio
+async def test_user_authentication_scopes_flows_to_workspace(api_client, monkeypatch):
+    client, _ = api_client
+    monkeypatch.setenv("AUTH_REQUIRED", "true")
+    monkeypatch.setenv("ALLOW_REGISTRATION", "false")
+    get_settings.cache_clear()
+    try:
+        blocked = await client.get("/api/flows")
+        registered = await client.post(
+            "/api/auth/register",
+            json={
+                "email": "owner@example.com",
+                "password": "correct horse battery staple",
+                "workspace_name": "Example Support",
+            },
+        )
+        token_payload = registered.json()
+        headers = {
+            "Authorization": f"Bearer {token_payload['token']}",
+            "X-Workspace-ID": token_payload["workspaces"][0]["id"],
+        }
+        workspace_flows = await client.get("/api/flows", headers=headers)
+        isolated_default = await client.get("/api/flows/demo-commerce", headers=headers)
+        logged_in = await client.post(
+            "/api/auth/login",
+            json={"email": "owner@example.com", "password": "correct horse battery staple"},
+        )
+        second_registration = await client.post(
+            "/api/auth/register",
+            json={
+                "email": "second@example.com",
+                "password": "another correct horse password",
+                "workspace_name": "Second Support",
+            },
+        )
+        logged_out = await client.post("/api/auth/logout", headers=headers)
+        revoked = await client.get("/api/flows", headers=headers)
+    finally:
+        get_settings.cache_clear()
+
+    assert blocked.status_code == 401
+    assert registered.status_code == 201
+    assert len(workspace_flows.json()) == 1
+    assert workspace_flows.json()[0]["id"].startswith("demo-")
+    assert isolated_default.status_code == 404
+    assert logged_in.status_code == 200
+    assert second_registration.status_code == 403
+    assert logged_out.status_code == 204
+    assert revoked.status_code == 401
+
+
+@pytest.mark.anyio
+async def test_generic_telephony_adapter_is_idempotent(api_client):
+    client, _ = api_client
+    payload = {"provider_call_id": "generic-call-1", "flow_id": "demo-commerce"}
+
+    first = await client.post("/api/telephony/generic/start", json=payload)
+    second = await client.post("/api/telephony/generic/start", json=payload)
+    session_id = first.json()["id"]
+    completed = await client.post(
+        f"/api/telephony/generic/{session_id}/input",
+        json={"provider_call_id": "generic-call-1", "value": "1"},
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert second.json()["id"] == session_id
+    assert completed.status_code == 200
+    assert completed.json()["status"] == "completed"
+    assert completed.json()["variables"]["channel"] == "generic-webhook"
+
+
+@pytest.mark.anyio
+async def test_generic_telephony_adapter_validates_signature(api_client):
+    client, _ = api_client
+    body = b'{"provider_call_id":"signed-call","flow_id":"demo-commerce"}'
+    signature = hmac.new(b"test-webhook-secret", body, hashlib.sha256).hexdigest()
+    generic_adapter.settings.generic_webhook_secret = "test-webhook-secret"
+    try:
+        rejected = await client.post(
+            "/api/telephony/generic/start",
+            content=body,
+            headers={"Content-Type": "application/json", "X-Revelys-Signature": "invalid"},
+        )
+        accepted = await client.post(
+            "/api/telephony/generic/start",
+            content=body,
+            headers={"Content-Type": "application/json", "X-Revelys-Signature": signature},
+        )
+    finally:
+        generic_adapter.settings.generic_webhook_secret = None
+
+    assert rejected.status_code == 403
     assert accepted.status_code == 200

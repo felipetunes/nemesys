@@ -1,4 +1,4 @@
-export type NodeKind = 'start' | 'prompt' | 'collect_input' | 'ai_intent' | 'decision' | 'set_variable' | 'end'
+export type NodeKind = 'start' | 'prompt' | 'collect_input' | 'ai_intent' | 'decision' | 'set_variable' | 'queue' | 'end'
 
 export interface FlowNode {
   id: string
@@ -56,11 +56,38 @@ export interface CallSession {
   flow_id: string
   flow_version: number
   revision: number
-  status: 'running' | 'waiting_input' | 'completed' | 'failed'
+  status: 'running' | 'waiting_input' | 'queued' | 'completed' | 'failed'
   current_node_id?: string | null
   variables: Record<string, unknown>
   trace: TraceEvent[]
   pending_input_variable?: string | null
   pending_input_prompt?: string | null
   last_prompt?: string | null
+  queue_name?: string | null
+  queued_at?: string | null
+  assigned_agent?: string | null
+}
+
+export interface MetricsSummary {
+  total_sessions: number
+  sessions_last_24h: number
+  status_counts: Record<string, number>
+  intent_counts: Record<string, number>
+  channel_counts: Record<string, number>
+  completion_rate: number
+  average_duration_seconds: number
+}
+
+export interface WorkspaceInfo {
+  id: string
+  name: string
+  role: string
+}
+
+export interface AuthTokenResponse {
+  token: string
+  expires_at: string
+  user_id: string
+  email: string
+  workspaces: WorkspaceInfo[]
 }

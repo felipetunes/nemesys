@@ -31,6 +31,21 @@ TWILIO_VALIDATE_SIGNATURES=true
 
 Keep the auth token out of Git and screenshots.
 
+## Generic JSON adapter
+
+Gateways and SIP applications can use the provider-neutral JSON endpoints:
+
+```text
+POST /api/telephony/generic/start
+POST /api/telephony/generic/{session_id}/input
+```
+
+`start` accepts `provider_call_id`, `flow_id` and optional initial variables. Repeating the same provider call ID returns the existing session. `input` accepts the same provider call ID plus a text or DTMF value.
+
+When `GENERIC_WEBHOOK_SECRET` is set, send `X-Revelys-Signature` containing the lowercase hexadecimal HMAC-SHA256 digest of the raw request body.
+
+The generic adapter and Twilio adapter both use the same session repository and `FlowEngine`. Speech rendering/recognition is exposed through a protocol in `app/telephony/speech.py`; provider-specific behavior remains under `app/telephony/`.
+
 ## Production note
 
 A production voice platform would normally add retry/idempotency behavior, durable active-session storage, recording policies, observability, failover, rate limiting, consent/privacy controls, and provider-specific error handling.

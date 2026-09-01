@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react'
-import { Activity, Bot, Cable, GitBranch, Github, KeyRound, LoaderCircle, Network, PlayCircle, Save } from 'lucide-react'
+import { Activity, BarChart3, Bot, Cable, GitBranch, Github, KeyRound, LoaderCircle, Network, PlayCircle, Save } from 'lucide-react'
 import { api } from './api'
+import AccessDialog from './components/AccessDialog'
 import FlowEditor from './components/FlowEditor'
+import MetricsDashboard from './components/MetricsDashboard'
 import Simulator from './components/Simulator'
 import type { FlowDefinition } from './types'
 import { validationErrorMessage, validationSuccessMessage } from './validation'
 
 export default function App() {
   const [flow, setFlow] = useState<FlowDefinition | null>(null)
-  const [tab, setTab] = useState<'editor' | 'simulator' | 'architecture'>('editor')
+  const [tab, setTab] = useState<'editor' | 'simulator' | 'metrics' | 'architecture'>('editor')
   const [saving, setSaving] = useState(false)
   const [publishing, setPublishing] = useState(false)
   const [importing, setImporting] = useState(false)
@@ -16,15 +18,20 @@ export default function App() {
   const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
   const [hasManagementToken, setHasManagementToken] = useState(() => Boolean(window.sessionStorage.getItem('revelys_management_token')))
+  const [accessRevision, setAccessRevision] = useState(0)
+  const [showAccess, setShowAccess] = useState(false)
 
   useEffect(() => {
-    Promise.all([api.getFlow('demo-commerce'), api.getFlowVersions('demo-commerce')])
-      .then(([draft, versions]) => {
+    api.listFlows()
+      .then(async drafts => {
+        if (drafts.length === 0) throw new Error('This workspace has no flows. Import a flow JSON to get started.')
+        const draft = drafts[0]
+        const versions = await api.getFlowVersions(draft.id)
         setFlow(draft)
         setPublishedVersion(versions[0]?.version ?? null)
       })
       .catch(e => setError(e instanceof Error ? e.message : String(e)))
-  }, [])
+  }, [accessRevision])
 
   const save = async (next: FlowDefinition) => {
     setSaving(true); setNotice(''); setError('')
@@ -83,14 +90,18 @@ export default function App() {
     finally { setImporting(false) }
   }
 
-  const configureManagementToken = () => {
-    const token = window.prompt('Management API token (leave empty to clear it):', '')
-    if (token === null) return
-    if (token.trim()) window.sessionStorage.setItem('revelys_management_token', token.trim())
-    else window.sessionStorage.removeItem('revelys_management_token')
-    setHasManagementToken(Boolean(token.trim()))
-    setNotice(token.trim() ? 'Management token set for this browser tab.' : 'Management token cleared.')
-    setTimeout(() => setNotice(''), 2200)
+  const refreshAccess = () => {
+    setHasManagementToken(Boolean(window.sessionStorage.getItem('revelys_management_token')))
+    setFlow(null)
+    setError('')
+    setAccessRevision(value => value + 1)
+    setShowAccess(false)
+  }
+
+  const clearAccess = () => {
+    window.sessionStorage.removeItem('revelys_management_token')
+    window.sessionStorage.removeItem('revelys_workspace_id')
+    refreshAccess()
   }
 
   return (
@@ -100,10 +111,11 @@ export default function App() {
         <nav>
           <button className={tab === 'editor' ? 'active' : ''} onClick={() => setTab('editor')}><GitBranch size={16} />Flow editor</button>
           <button className={tab === 'simulator' ? 'active' : ''} onClick={() => setTab('simulator')}><PlayCircle size={16} />Simulator</button>
+          <button className={tab === 'metrics' ? 'active' : ''} onClick={() => setTab('metrics')}><BarChart3 size={16} />Metrics</button>
           <button className={tab === 'architecture' ? 'active' : ''} onClick={() => setTab('architecture')}><Activity size={16} />Architecture</button>
         </nav>
         <div className="topbar-actions">
-          <button className={`access-btn${hasManagementToken ? ' configured' : ''}`} onClick={configureManagementToken} title="Configure management API token"><KeyRound size={16} />Access</button>
+          <button className={`access-btn${hasManagementToken ? ' configured' : ''}`} onClick={() => setShowAccess(true)} title="Configure workspace access"><KeyRound size={16} />Access</button>
           <a className="github-link" href="https://github.com/felipetunes/revelys" target="_blank" rel="noreferrer"><Github size={17} />GitHub</a>
         </div>
       </header>
@@ -114,8 +126,10 @@ export default function App() {
         {!flow && !error && <div className="loading"><LoaderCircle className="spin" />Loading demo flow…</div>}
         {flow && tab === 'editor' && <FlowEditor key={`${flow.id}:${flow.updated_at ?? ''}`} flow={flow} onSave={save} onPublish={publish} onExport={exportFlow} onImport={importFlow} saving={saving} publishing={publishing} importing={importing} publishedVersion={publishedVersion} />}
         {flow && tab === 'simulator' && <Simulator flow={flow} />}
+        {flow && tab === 'metrics' && <MetricsDashboard />}
         {flow && tab === 'architecture' && <Architecture />}
       </main>
+      {showAccess && <AccessDialog configured={hasManagementToken} onClose={() => setShowAccess(false)} onAuthenticated={refreshAccess} onClear={clearAccess} />}
     </div>
   )
 }

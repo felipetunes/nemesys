@@ -63,6 +63,17 @@ Stores a static value.
 {"variable": "tier", "value": "gold"}
 ```
 
+### `queue`
+
+Pauses execution in a named human-agent queue. Claiming the session through the queue API records the assigned agent and wait time, then resumes on the node's unconditional edge.
+
+```json
+{
+  "queue_name": "customer-care",
+  "message": "You are waiting for a human agent."
+}
+```
+
 ### `end`
 Terminates the session.
 
@@ -85,3 +96,5 @@ If a node has conditional edges, the engine compares the node result/value to `e
 ## Draft and publish lifecycle
 
 `PUT /api/flows/{flow_id}` saves a mutable draft. `POST /api/flows/{flow_id}/publish` validates that draft and creates a new immutable version. New sessions use the latest published version unless a specific version is requested; existing sessions remain pinned to the version with which they started.
+
+Sessions transition through `running`, `waiting_input`, `queued`, `completed` or `failed`. Each transition that changes execution behavior is represented in the trace.

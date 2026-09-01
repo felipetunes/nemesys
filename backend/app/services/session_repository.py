@@ -15,8 +15,9 @@ class SessionConflictError(RuntimeError):
 
 
 class SessionRepository:
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, workspace_id: str = "default"):
         self.db = db
+        self.workspace_id = workspace_id
 
     def create(
         self,
@@ -29,6 +30,7 @@ class SessionRepository:
         self.db.add(
             SessionRow(
                 id=payload.id,
+                workspace_id=self.workspace_id,
                 flow_id=payload.flow_id,
                 flow_version=payload.flow_version,
                 status=payload.status,
@@ -51,7 +53,12 @@ class SessionRepository:
         return payload
 
     def get(self, session_id: str) -> CallSession | None:
-        row = self.db.get(SessionRow, session_id)
+        row = self.db.scalar(
+            select(SessionRow).where(
+                SessionRow.id == session_id,
+                SessionRow.workspace_id == self.workspace_id,
+            )
+        )
         return self._to_model(row) if row else None
 
     def get_by_provider_call(self, provider: str, provider_call_id: str) -> CallSession | None:
@@ -59,9 +66,18 @@ class SessionRepository:
             select(SessionRow).where(
                 SessionRow.provider == provider,
                 SessionRow.provider_call_id == provider_call_id,
+                SessionRow.workspace_id == self.workspace_id,
             )
         )
         return self._to_model(row) if row else None
+
+    def list_by_status(self, status: str) -> list[CallSession]:
+        rows = self.db.scalars(
+            select(SessionRow)
+            .where(SessionRow.status == status, SessionRow.workspace_id == self.workspace_id)
+            .order_by(SessionRow.updated_at)
+        ).all()
+        return [self._to_model(row) for row in rows]
 
     def save(self, session: CallSession, *, expected_revision: int) -> CallSession:
         next_revision = expected_revision + 1
@@ -70,7 +86,11 @@ class SessionRepository:
             CursorResult[Any],
             self.db.execute(
                 update(SessionRow)
-                .where(SessionRow.id == session.id, SessionRow.revision == expected_revision)
+                .where(
+                    SessionRow.id == session.id,
+                    SessionRow.revision == expected_revision,
+                    SessionRow.workspace_id == self.workspace_id,
+                )
                 .values(
                     status=payload.status,
                     session_json=payload.model_dump_json(),

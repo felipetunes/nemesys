@@ -58,11 +58,14 @@ def build_demo_flow() -> FlowDefinition:
             ),
             FlowNode(
                 id="human",
-                type="prompt",
-                label="Human agent",
+                type="queue",
+                label="Agent queue",
                 x=1000,
                 y=260,
-                config={"message": "Tudo bem. Vou direcionar você para um atendente."},
+                config={
+                    "queue_name": "customer-care",
+                    "message": "Tudo bem. Você entrou na fila de atendimento humano.",
+                },
             ),
             FlowNode(
                 id="fallback",

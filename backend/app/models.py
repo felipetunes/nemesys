@@ -4,12 +4,12 @@ from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-from sqlalchemy import DateTime, Integer, String, Text, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
 
-NodeType = Literal["start", "prompt", "collect_input", "ai_intent", "decision", "set_variable", "end"]
+NodeType = Literal["start", "prompt", "collect_input", "ai_intent", "decision", "set_variable", "queue", "end"]
 VariableName = Annotated[str, Field(min_length=1, max_length=120, pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")]
 FlowIdentifier = Annotated[str, Field(min_length=1, max_length=120, pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]*$")]
 
@@ -57,7 +57,12 @@ class SetVariableConfig(StrictModel):
     value: Any
 
 
-NodeConfig = StartConfig | MessageConfig | CollectInputConfig | AiIntentConfig | DecisionConfig | SetVariableConfig
+class QueueConfig(StrictModel):
+    queue_name: str = Field(min_length=1, max_length=120)
+    message: str = Field(min_length=1, max_length=4000)
+
+
+NodeConfig = StartConfig | MessageConfig | CollectInputConfig | AiIntentConfig | DecisionConfig | SetVariableConfig | QueueConfig
 NODE_CONFIG_MODELS: dict[str, type[StrictModel]] = {
     "start": StartConfig,
     "prompt": MessageConfig,
@@ -65,6 +70,7 @@ NODE_CONFIG_MODELS: dict[str, type[StrictModel]] = {
     "ai_intent": AiIntentConfig,
     "decision": DecisionConfig,
     "set_variable": SetVariableConfig,
+    "queue": QueueConfig,
     "end": MessageConfig,
 }
 
@@ -121,6 +127,7 @@ class FlowDefinition(StrictModel):
 class FlowRow(Base):
     __tablename__ = "flows"
     id: Mapped[str] = mapped_column(String(120), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(String(36), default="default", index=True)
     name: Mapped[str] = mapped_column(String(200))
     description: Mapped[str] = mapped_column(Text, default="")
     definition_json: Mapped[str] = mapped_column(Text)
@@ -131,11 +138,12 @@ class FlowVersionRow(Base):
     __tablename__ = "flow_versions"
     flow_id: Mapped[str] = mapped_column(String(120), primary_key=True)
     version: Mapped[int] = mapped_column(Integer, primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(String(36), default="default", index=True)
     definition_json: Mapped[str] = mapped_column(Text)
     published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
-SessionStatus = Literal["running", "waiting_input", "completed", "failed"]
+SessionStatus = Literal["running", "waiting_input", "queued", "completed", "failed"]
 
 
 class TraceEvent(StrictModel):
@@ -159,6 +167,9 @@ class CallSession(StrictModel):
     pending_input_variable: str | None = None
     pending_input_prompt: str | None = None
     last_prompt: str | None = None
+    queue_name: str | None = None
+    queued_at: datetime | None = None
+    assigned_agent: str | None = None
 
 
 class SessionCreate(StrictModel):
@@ -171,6 +182,10 @@ class SessionInput(StrictModel):
     value: str = Field(min_length=1, max_length=2000)
 
 
+class QueueClaim(StrictModel):
+    agent_name: str = Field(min_length=1, max_length=120)
+
+
 class IntentResult(StrictModel):
     intent: str
     confidence: float = Field(ge=0, le=1)
@@ -178,11 +193,90 @@ class IntentResult(StrictModel):
     provider: str
 
 
+class MetricsSummary(StrictModel):
+    total_sessions: int
+    sessions_last_24h: int
+    status_counts: dict[str, int]
+    intent_counts: dict[str, int]
+    channel_counts: dict[str, int]
+    completion_rate: float = Field(ge=0, le=1)
+    average_duration_seconds: float
+
+
+class RetentionResult(StrictModel):
+    retention_days: int
+    cutoff: datetime
+    deleted_sessions: int
+
+
+class RegisterRequest(StrictModel):
+    email: str = Field(min_length=5, max_length=320, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+    password: str = Field(min_length=12, max_length=200)
+    workspace_name: str = Field(min_length=2, max_length=120)
+
+
+class LoginRequest(StrictModel):
+    email: str = Field(min_length=5, max_length=320)
+    password: str = Field(min_length=1, max_length=200)
+
+
+class WorkspaceInfo(StrictModel):
+    id: str
+    name: str
+    role: str
+
+
+class AuthTokenResponse(StrictModel):
+    token: str
+    expires_at: datetime
+    user_id: str
+    email: str
+    workspaces: list[WorkspaceInfo]
+
+
+class AuthMe(StrictModel):
+    user_id: str
+    email: str
+    active_workspace_id: str
+    workspaces: list[WorkspaceInfo]
+
+
+class WorkspaceRow(Base):
+    __tablename__ = "workspaces"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    name: Mapped[str] = mapped_column(String(120))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+
+
+class UserRow(Base):
+    __tablename__ = "users"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+
+
+class WorkspaceMembershipRow(Base):
+    __tablename__ = "workspace_memberships"
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"), primary_key=True)
+    role: Mapped[str] = mapped_column(String(30), default="owner")
+
+
+class AuthSessionRow(Base):
+    __tablename__ = "auth_sessions"
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+
+
 class SessionRow(Base):
     __tablename__ = "sessions"
     __table_args__ = (UniqueConstraint("provider", "provider_call_id", name="uq_session_provider_call"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(String(36), default="default", index=True)
     flow_id: Mapped[str] = mapped_column(String(120), index=True)
     flow_version: Mapped[int] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(String(30), index=True)

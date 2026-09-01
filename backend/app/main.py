@@ -5,12 +5,19 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.auth import router as auth_router
 from app.api.flows import router as flows_router
+from app.api.operations import router as operations_router
+from app.api.queue import router as queue_router
 from app.api.sessions import router as sessions_router
 from app.core.config import get_settings
 from app.core.db import Base, SessionLocal, engine
+from app.core.migrations import upgrade_database
 from app.demo_flow import build_demo_flow
+from app.services.auth import AuthService
 from app.services.flow_repository import FlowRepository
+from app.services.retention import RetentionService
+from app.telephony.generic_adapter import router as generic_telephony_router
 from app.telephony.twilio_adapter import router as twilio_router
 
 settings = get_settings()
@@ -18,17 +25,20 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    upgrade_database(engine, settings.database_url)
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as db:
-        repo = FlowRepository(db)
+        AuthService(db).ensure_default_workspace()
+        repo = FlowRepository(db, "default")
         if repo.get("demo-commerce") is None:
             repo.save(build_demo_flow())
         if repo.get_published("demo-commerce") is None:
             repo.publish("demo-commerce")
+        RetentionService(db).prune_terminal_sessions(settings.session_retention_days)
     yield
 
 
-app = FastAPI(title=settings.app_name, version="0.3.0", lifespan=lifespan)
+app = FastAPI(title=settings.app_name, version="0.4.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
@@ -37,8 +47,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(flows_router)
+app.include_router(auth_router)
 app.include_router(sessions_router)
+app.include_router(operations_router)
+app.include_router(queue_router)
 app.include_router(twilio_router)
+app.include_router(generic_telephony_router)
 
 
 @app.get("/health")

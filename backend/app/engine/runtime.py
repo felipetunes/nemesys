@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
@@ -11,6 +12,7 @@ from app.models import (
     FlowDefinition,
     FlowNode,
     MessageConfig,
+    QueueConfig,
     SetVariableConfig,
     TraceEvent,
 )
@@ -59,10 +61,30 @@ class FlowEngine:
         self.run(flow, session)
         return session
 
+    def connect_agent(self, flow: FlowDefinition, session: CallSession, agent_name: str) -> CallSession:
+        if session.status != "queued" or not session.queue_name:
+            raise FlowEngineError("Session is not waiting in an agent queue")
+        wait_seconds = 0.0
+        if session.queued_at is not None:
+            wait_seconds = max((datetime.now(UTC) - session.queued_at).total_seconds(), 0)
+        session.assigned_agent = agent_name
+        session.variables["assigned_agent"] = agent_name
+        session.status = "running"
+        self._event(
+            session,
+            "agent_connected",
+            session.current_node_id,
+            f"Agent {agent_name} connected",
+            {"agent_name": agent_name, "queue_name": session.queue_name, "wait_seconds": wait_seconds},
+        )
+        self._advance_unconditional(flow, session)
+        self.run(flow, session)
+        return session
+
     def run(self, flow: FlowDefinition, session: CallSession, max_steps: int = 50) -> None:
         node_map = {n.id: n for n in flow.nodes}
         for _ in range(max_steps):
-            if session.status in ("waiting_input", "completed", "failed"):
+            if session.status in ("waiting_input", "queued", "completed", "failed"):
                 return
             node = node_map.get(session.current_node_id or "")
             if not node:
@@ -132,6 +154,22 @@ class FlowEngine:
                 result.model_dump(),
             )
             return self._advance_by_condition(flow, session, result.intent)
+
+        if node.type == "queue":
+            assert isinstance(node.config, QueueConfig)
+            session.queue_name = node.config.queue_name
+            session.queued_at = datetime.now(UTC)
+            session.last_prompt = node.config.message
+            session.status = "queued"
+            self._event(session, "prompt", node.id, node.config.message)
+            self._event(
+                session,
+                "session_queued",
+                node.id,
+                f"Session entered queue {node.config.queue_name}",
+                {"queue_name": node.config.queue_name},
+            )
+            return False
 
         if node.type == "decision":
             assert isinstance(node.config, DecisionConfig)

@@ -97,7 +97,7 @@ def validate_flow(flow: FlowDefinition) -> FlowValidationResult:
             )
             continue
 
-        if node.type in {"start", "prompt", "collect_input", "set_variable"}:
+        if node.type in {"start", "prompt", "collect_input", "set_variable", "queue"}:
             default_edges = [edge for edge in node_edges if edge.condition is None]
             if len(default_edges) != 1:
                 errors.append(

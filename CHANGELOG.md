@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.4.0 — 2026-09-01
+
+### Added
+
+- PBKDF2 password authentication, revocable sessions and workspace isolation.
+- Automatic adoption and migration of legacy SQLite databases.
+- Configurable terminal-session retention and operational metrics.
+- Human-agent queue node, queue API and browser agent simulator.
+- Browser speech input/output and a backend telephony speech contract.
+- Signed, idempotent generic JSON telephony webhooks.
+
+### Changed
+
+- Flow, session, queue and metrics access is scoped to the active workspace.
+- The demo human-agent route now pauses in a real queue state.
+
 ## 0.3.0 — 2026-08-31
 
 ### Added

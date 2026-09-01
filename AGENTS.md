@@ -45,11 +45,8 @@ npm run check
 
 ## Useful next milestones
 
-- database migration lifecycle and session retention policies;
-- PostgreSQL + Redis production profile;
-- queue and agent simulator;
-- speech provider abstraction;
-- metrics dashboard;
-- flow import/export;
-- authentication and workspaces;
-- provider adapters beyond Twilio.
+- composite flow identifiers for unrestricted cross-workspace naming;
+- Redis-backed distributed queue workers;
+- production speech providers and additional carrier adapters;
+- structured logs, OpenTelemetry and alerting;
+- public demo deployment and end-to-end browser tests.

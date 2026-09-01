@@ -72,12 +72,13 @@
     },
     {
       "id": "human",
-      "type": "prompt",
-      "label": "Human agent",
+      "type": "queue",
+      "label": "Agent queue",
       "x": 1000.0,
       "y": 260.0,
       "config": {
-        "message": "Tudo bem. Vou direcionar você para um atendente."
+        "queue_name": "customer-care",
+        "message": "Tudo bem. Você entrou na fila de atendimento humano."
       }
     },
     {

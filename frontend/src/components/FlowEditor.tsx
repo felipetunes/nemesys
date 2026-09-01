@@ -11,7 +11,7 @@ import {
   type Edge,
   type Node,
 } from '@xyflow/react'
-import { Bot, CircleStop, Download, FileUp, GitBranch, MessageSquareText, MousePointerClick, Play, Plus, Save, Trash2, UploadCloud, Variable } from 'lucide-react'
+import { Bot, CircleStop, Download, FileUp, GitBranch, Headphones, MessageSquareText, MousePointerClick, Play, Plus, Save, Trash2, UploadCloud, Variable } from 'lucide-react'
 import IvrNode from './IvrNode'
 import type { FlowDefinition, FlowNode, NodeKind } from '../types'
 
@@ -33,6 +33,7 @@ const palette: { type: NodeKind; label: string; icon: typeof Play }[] = [
   { type: 'ai_intent', label: 'AI intent', icon: Bot },
   { type: 'decision', label: 'Decision', icon: GitBranch },
   { type: 'set_variable', label: 'Set variable', icon: Variable },
+  { type: 'queue', label: 'Agent queue', icon: Headphones },
   { type: 'end', label: 'End', icon: CircleStop },
 ]
 
@@ -66,6 +67,7 @@ export default function FlowEditor({ flow, onSave, onPublish, onExport, onImport
       ai_intent: { source_variable: 'input', result_variable: 'intent', intents: ['option_a', 'fallback'] },
       decision: { variable: 'intent' },
       set_variable: { variable: 'name', value: 'value' },
+      queue: { queue_name: 'customer-care', message: 'Você entrou na fila de atendimento humano.' },
       end: { message: 'Até logo!' },
     }
     const node: Node = {
@@ -211,6 +213,10 @@ export default function FlowEditor({ flow, onSave, onPublish, onExport, onImport
           {kind === 'set_variable' && <>
             <label>Variable<input value={String(config.variable || '')} onChange={e => updateSelected('config', { ...config, variable: e.target.value })} /></label>
             <label>Value<input value={String(config.value || '')} onChange={e => updateSelected('config', { ...config, value: e.target.value })} /></label>
+          </>}
+          {kind === 'queue' && <>
+            <label>Queue name<input value={String(config.queue_name || '')} onChange={e => updateSelected('config', { ...config, queue_name: e.target.value })} /></label>
+            <label>Waiting message<textarea value={String(config.message || '')} onChange={e => updateSelected('config', { ...config, message: e.target.value })} /></label>
           </>}
           {kind === 'end' && <label>Final message<textarea value={String(config.message || '')} onChange={e => updateSelected('config', { ...config, message: e.target.value })} /></label>}
           <div className="field-hint">Select an outgoing edge to edit its routing condition.</div>

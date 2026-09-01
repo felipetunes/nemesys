@@ -39,3 +39,22 @@ def test_fallback_route():
     engine.submit_input(flow, session, "banana")
     assert session.status == "completed"
     assert any("não consegui identificar" in e.message.lower() for e in session.trace if e.type == "prompt")
+
+
+def test_human_agent_route_waits_in_queue_and_resumes():
+    flow = build_demo_flow()
+    engine = FlowEngine(classifier=FakeClassifier("human_agent"))
+    session = engine.create_session(flow)
+
+    engine.submit_input(flow, session, "quero falar com alguém")
+
+    assert session.status == "queued"
+    assert session.queue_name == "customer-care"
+    assert any(event.type == "session_queued" for event in session.trace)
+
+    engine.connect_agent(flow, session, "Browser Agent")
+
+    assert session.status == "completed"
+    assert session.assigned_agent == "Browser Agent"
+    assert session.variables["assigned_agent"] == "Browser Agent"
+    assert any(event.type == "agent_connected" for event in session.trace)

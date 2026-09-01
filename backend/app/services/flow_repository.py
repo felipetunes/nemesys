@@ -9,25 +9,37 @@ from sqlalchemy.orm import Session
 from app.models import FlowDefinition, FlowRow, FlowVersionRow
 
 
+class FlowIdentifierConflictError(RuntimeError):
+    pass
+
+
 class FlowRepository:
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, workspace_id: str = "default"):
         self.db = db
+        self.workspace_id = workspace_id
 
     def list_drafts(self) -> list[FlowDefinition]:
-        rows = self.db.scalars(select(FlowRow).order_by(FlowRow.name)).all()
+        rows = self.db.scalars(
+            select(FlowRow).where(FlowRow.workspace_id == self.workspace_id).order_by(FlowRow.name)
+        ).all()
         return [self._draft_to_model(row) for row in rows]
 
     def get(self, flow_id: str) -> FlowDefinition | None:
-        row = self.db.get(FlowRow, flow_id)
+        row = self.db.scalar(
+            select(FlowRow).where(FlowRow.id == flow_id, FlowRow.workspace_id == self.workspace_id)
+        )
         return self._draft_to_model(row) if row else None
 
     def save(self, flow: FlowDefinition) -> FlowDefinition:
         now = datetime.now(UTC)
         payload = flow.model_copy(update={"updated_at": now, "version": None, "published_at": None})
         row = self.db.get(FlowRow, flow.id)
+        if row is not None and row.workspace_id != self.workspace_id:
+            raise FlowIdentifierConflictError("Flow identifier is already in use")
         if row is None:
             row = FlowRow(
                 id=flow.id,
+                workspace_id=self.workspace_id,
                 name=flow.name,
                 description=flow.description,
                 definition_json=payload.model_dump_json(),
@@ -54,6 +66,7 @@ class FlowRepository:
             FlowVersionRow(
                 flow_id=flow_id,
                 version=version,
+                workspace_id=self.workspace_id,
                 definition_json=payload.model_dump_json(),
                 published_at=published_at,
             )
@@ -64,19 +77,33 @@ class FlowRepository:
     def get_published(self, flow_id: str) -> FlowDefinition | None:
         row = self.db.scalar(
             select(FlowVersionRow)
-            .where(FlowVersionRow.flow_id == flow_id)
+            .where(
+                FlowVersionRow.flow_id == flow_id,
+                FlowVersionRow.workspace_id == self.workspace_id,
+            )
             .order_by(FlowVersionRow.version.desc())
             .limit(1)
         )
         return self._version_to_model(row) if row else None
 
     def get_version(self, flow_id: str, version: int) -> FlowDefinition | None:
-        row = self.db.get(FlowVersionRow, (flow_id, version))
+        row = self.db.scalar(
+            select(FlowVersionRow).where(
+                FlowVersionRow.flow_id == flow_id,
+                FlowVersionRow.version == version,
+                FlowVersionRow.workspace_id == self.workspace_id,
+            )
+        )
         return self._version_to_model(row) if row else None
 
     def list_versions(self, flow_id: str) -> list[FlowDefinition]:
         rows = self.db.scalars(
-            select(FlowVersionRow).where(FlowVersionRow.flow_id == flow_id).order_by(FlowVersionRow.version.desc())
+            select(FlowVersionRow)
+            .where(
+                FlowVersionRow.flow_id == flow_id,
+                FlowVersionRow.workspace_id == self.workspace_id,
+            )
+            .order_by(FlowVersionRow.version.desc())
         ).all()
         return [self._version_to_model(row) for row in rows]
 

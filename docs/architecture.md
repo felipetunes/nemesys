@@ -41,6 +41,14 @@ Provider abstraction with two implementations:
 ### Telephony adapter
 Converts provider webhook calls into the same session operations used by the browser simulator. Provider call IDs are unique, making webhook retries idempotent. This prevents telephone-specific code from leaking into the core engine.
 
+### Identity and workspaces
+
+Passwords use salted PBKDF2 derivation. Only token hashes are persisted, tokens expire, and logout revokes them. API access resolves one workspace membership and applies that workspace to flow, version, session, queue and metric queries. With authentication disabled, the same code uses the `default` offline workspace.
+
+### Operations
+
+Terminal sessions have configurable retention. Metrics are computed from persisted sessions and their trace timestamps, including volume, state, intent, channel, completion rate and duration. A queue node pauses the engine in a traceable `queued` state until an explicit agent claim resumes deterministic routing.
+
 ## Production evolution
 
-For a production-grade version, add schema migrations, use PostgreSQL as the durable source of truth, optionally cache active sessions in Redis, push traces onto an event bus, use object storage for recordings and introduce distributed worker execution for external API calls.
+The included production profile applies Alembic migrations, uses PostgreSQL as the durable source of truth and provisions Redis for the next distributed-worker milestone. Further production work includes pushing traces onto an event bus, object storage for recordings, OpenTelemetry, key rotation and external identity-provider integration.
