@@ -22,5 +22,6 @@ describe('flow validation messages', () => {
     }
 
     expect(validationSuccessMessage(result, 'Flow saved.')).toBe('Flow saved. 1 validation warning(s).')
+    expect(validationSuccessMessage(result, 'Fluxo salvo.', count => `${count} aviso(s) de validação.`)).toBe('Fluxo salvo. 1 aviso(s) de validação.')
   })
 })

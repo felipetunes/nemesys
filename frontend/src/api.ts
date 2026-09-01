@@ -40,6 +40,7 @@ export const api = {
   createSession: (flowId: string) => request<CallSession>('/api/sessions', { method: 'POST', body: JSON.stringify({ flow_id: flowId }) }),
   submitInput: (sessionId: string, value: string) => request<CallSession>(`/api/sessions/${sessionId}/input`, { method: 'POST', body: JSON.stringify({ value }) }),
   getMetrics: () => request<MetricsSummary>('/api/operations/metrics'),
+  listQueuedSessions: () => request<CallSession[]>('/api/queue'),
   claimQueueSession: (sessionId: string, agentName: string) => request<CallSession>(`/api/queue/${sessionId}/claim`, { method: 'POST', body: JSON.stringify({ agent_name: agentName }) }),
   login: (email: string, password: string) => request<AuthTokenResponse>('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
   register: (email: string, password: string, workspaceName: string) => request<AuthTokenResponse>('/api/auth/register', { method: 'POST', body: JSON.stringify({ email, password, workspace_name: workspaceName }) }),

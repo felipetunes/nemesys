@@ -4,7 +4,7 @@
 [![Release](https://img.shields.io/github/v/release/felipetunes/nemesys)](https://github.com/felipetunes/nemesys/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-7c5cff.svg)](LICENSE)
 
-**Current project version: `0.5.0` — Nemesys reliability and security**
+**Current project version: `0.7.0` — multi-IVR Architect catalog and contextual node help**
 
 **A visual, AI-assisted IVR flow builder and runtime for learning, prototyping and portfolio demos.**
 
@@ -43,7 +43,21 @@ Traditional IVRs are often built inside proprietary platforms. Nemesys exposes t
 - login lockout, operational request IDs, security headers and readiness probes;
 - persisted audit events for sensitive management operations;
 - timestamped generic webhooks with replay-window enforcement;
-- dependency vulnerability checks in CI and weekly automated update proposals.
+- dependency vulnerability checks in CI and weekly automated update proposals;
+- a Brazilian Portuguese interface by default, with an in-app `PT-BR` / `EN-US` selector;
+- distinct **Architect** and **Collaborate** product areas;
+- a Collaborate queue workspace where agents can inspect and claim waiting sessions;
+- a persistent Architect catalog for creating, selecting and evolving multiple IVRs;
+- contextual descriptions for every node type in the palette and flow canvas.
+
+## Product areas and languages
+
+Nemesys separates design-time and operational responsibilities while keeping one provider-neutral runtime:
+
+- **Architect** contains the multi-IVR catalog, visual flow editor, browser simulator and runtime architecture view.
+- **Collaborate** contains operational metrics and the live human-agent queue.
+
+The interface starts in Brazilian Portuguese (`pt-BR`). Use the language selector in the top bar to switch to English (`en-US`); the selection is saved locally in the browser.
 
 ## Demo flow
 

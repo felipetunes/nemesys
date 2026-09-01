@@ -12,6 +12,7 @@ import {
   type Node,
 } from '@xyflow/react'
 import { Bot, CircleStop, Download, FileUp, GitBranch, Headphones, MessageSquareText, MousePointerClick, Play, Plus, Save, Trash2, UploadCloud, Variable } from 'lucide-react'
+import { useI18n, type TranslationKey } from '../i18n'
 import IvrNode from './IvrNode'
 import type { FlowDefinition, FlowNode, NodeKind } from '../types'
 
@@ -27,21 +28,44 @@ interface Props {
   publishedVersion: number | null
 }
 
-const palette: { type: NodeKind; label: string; icon: typeof Play }[] = [
-  { type: 'prompt', label: 'Prompt', icon: MessageSquareText },
-  { type: 'collect_input', label: 'Collect input', icon: MousePointerClick },
-  { type: 'ai_intent', label: 'AI intent', icon: Bot },
-  { type: 'decision', label: 'Decision', icon: GitBranch },
-  { type: 'set_variable', label: 'Set variable', icon: Variable },
-  { type: 'queue', label: 'Agent queue', icon: Headphones },
-  { type: 'end', label: 'End', icon: CircleStop },
+const palette: { type: NodeKind; icon: typeof Play }[] = [
+  { type: 'prompt', icon: MessageSquareText },
+  { type: 'collect_input', icon: MousePointerClick },
+  { type: 'ai_intent', icon: Bot },
+  { type: 'decision', icon: GitBranch },
+  { type: 'set_variable', icon: Variable },
+  { type: 'queue', icon: Headphones },
+  { type: 'end', icon: CircleStop },
 ]
+
+const nodeLabelKeys: Record<NodeKind, TranslationKey> = {
+  start: 'node.start',
+  prompt: 'node.prompt',
+  collect_input: 'node.collect_input',
+  ai_intent: 'node.ai_intent',
+  decision: 'node.decision',
+  set_variable: 'node.set_variable',
+  queue: 'node.queue',
+  end: 'node.end',
+}
+
+const nodeDescriptionKeys: Record<NodeKind, TranslationKey> = {
+  start: 'node.startDescription',
+  prompt: 'node.promptDescription',
+  collect_input: 'node.collect_inputDescription',
+  ai_intent: 'node.ai_intentDescription',
+  decision: 'node.decisionDescription',
+  set_variable: 'node.set_variableDescription',
+  queue: 'node.queueDescription',
+  end: 'node.endDescription',
+}
 
 function toRfNode(n: FlowNode): Node {
   return { id: n.id, type: 'ivr', position: { x: n.x, y: n.y }, data: { label: n.label, kind: n.type, config: n.config } }
 }
 
 export default function FlowEditor({ flow, onSave, onPublish, onExport, onImport, saving, publishing, importing, publishedVersion }: Props) {
+  const { t } = useI18n()
   const [nodes, setNodes, onNodesChange] = useNodesState(flow.nodes.map(toRfNode))
   const [edges, setEdges, onEdgesChange] = useEdgesState(
     flow.edges.map(e => ({ id: e.id, source: e.source, target: e.target, label: e.label || e.condition || undefined, data: { condition: e.condition } })),
@@ -62,19 +86,19 @@ export default function FlowEditor({ flow, onSave, onPublish, onExport, onImport
     const id = `${kind}-${crypto.randomUUID().slice(0, 8)}`
     const defaults: Record<NodeKind, Record<string, unknown>> = {
       start: {},
-      prompt: { message: 'Novo prompt' },
-      collect_input: { prompt: 'Diga ou digite uma opção.', variable: 'input', input_mode: 'speech_or_dtmf' },
+      prompt: { message: t('node.defaultPrompt') },
+      collect_input: { prompt: t('node.defaultCollectPrompt'), variable: 'input', input_mode: 'speech_or_dtmf' },
       ai_intent: { source_variable: 'input', result_variable: 'intent', intents: ['option_a', 'fallback'] },
       decision: { variable: 'intent' },
       set_variable: { variable: 'name', value: 'value' },
-      queue: { queue_name: 'customer-care', message: 'Você entrou na fila de atendimento humano.' },
-      end: { message: 'Até logo!' },
+      queue: { queue_name: 'customer-care', message: t('node.defaultQueueMessage') },
+      end: { message: t('node.defaultEndMessage') },
     }
     const node: Node = {
       id,
       type: 'ivr',
       position: position ?? { x: 420 + (nodes.length % 3) * 40, y: 120 + (nodes.length % 7) * 60 },
-      data: { label: palette.find(p => p.type === kind)?.label || kind, kind, config: defaults[kind] },
+      data: { label: t(nodeLabelKeys[kind]), kind, config: defaults[kind] },
     }
     setNodes(items => [...items, node])
     setSelectedId(id)
@@ -136,17 +160,17 @@ export default function FlowEditor({ flow, onSave, onPublish, onExport, onImport
   return (
     <div className="editor-layout">
       <aside className="palette panel">
-        <div className="section-title"><Plus size={15} /> Nodes</div>
+        <div className="section-title"><Plus size={15} /> {t('flow.nodes')}</div>
         {palette.map(item => {
           const Icon = item.icon
-          return <button key={item.type} className="palette-btn" draggable onDragStart={event => { event.dataTransfer.setData('application/nemesys-node-kind', item.type); event.dataTransfer.effectAllowed = 'copy' }} onClick={() => addNode(item.type)}><Icon size={16} /><span>{item.label}</span></button>
+          return <button key={item.type} className="palette-btn" title={t(nodeDescriptionKeys[item.type])} draggable onDragStart={event => { event.dataTransfer.setData('application/nemesys-node-kind', item.type); event.dataTransfer.effectAllowed = 'copy' }} onClick={() => addNode(item.type)}><Icon size={16} /><span>{t(nodeLabelKeys[item.type])}</span></button>
         })}
-        <div className="palette-note"><Play size={14} /> Start nodes are intentionally unique. Use the seeded one.</div>
+        <div className="palette-note"><Play size={14} /> {t('flow.paletteNote')}</div>
       </aside>
 
       <section className="canvas panel">
         <div className="canvas-toolbar">
-          <div><strong>{flow.name}</strong><span>{nodes.length} nodes · {edges.length} edges · published v{publishedVersion ?? '—'}</span></div>
+          <div><strong>{flow.name}</strong><span>{t('flow.stats', { nodes: nodes.length, edges: edges.length, version: publishedVersion ?? '—' })}</span></div>
           <div className="toolbar-actions">
             <input
               ref={importInput}
@@ -159,10 +183,10 @@ export default function FlowEditor({ flow, onSave, onPublish, onExport, onImport
                 event.target.value = ''
               }}
             />
-            <button className="icon-btn" title="Import flow JSON" aria-label="Import flow JSON" disabled={saving || publishing || importing} onClick={() => importInput.current?.click()}><FileUp size={16} /></button>
-            <button className="icon-btn" title="Export flow JSON" aria-label="Export flow JSON" disabled={saving || publishing || importing} onClick={() => onExport(buildFlow())}><Download size={16} /></button>
-            <button className="secondary-btn" disabled={saving || publishing || importing} onClick={() => onSave(buildFlow())}><Save size={16} />{saving ? 'Saving…' : 'Save draft'}</button>
-            <button className="primary-btn" disabled={saving || publishing || importing} onClick={() => onPublish(buildFlow())}><UploadCloud size={16} />{publishing ? 'Publishing…' : 'Publish'}</button>
+            <button className="icon-btn" title={t('flow.import')} aria-label={t('flow.import')} disabled={saving || publishing || importing} onClick={() => importInput.current?.click()}><FileUp size={16} /></button>
+            <button className="icon-btn" title={t('flow.export')} aria-label={t('flow.export')} disabled={saving || publishing || importing} onClick={() => onExport(buildFlow())}><Download size={16} /></button>
+            <button className="secondary-btn" disabled={saving || publishing || importing} onClick={() => onSave(buildFlow())}><Save size={16} />{saving ? t('flow.saving') : t('flow.saveDraft')}</button>
+            <button className="primary-btn" disabled={saving || publishing || importing} onClick={() => onPublish(buildFlow())}><UploadCloud size={16} />{publishing ? t('flow.publishing') : t('flow.publish')}</button>
           </div>
         </div>
         <div className="flow-area">
@@ -189,38 +213,38 @@ export default function FlowEditor({ flow, onSave, onPublish, onExport, onImport
       </section>
 
       <aside className="properties panel">
-        <div className="section-title">Properties</div>
-        {!selected && !selectedEdge && <div className="empty-state">Select a node or edge to inspect its configuration.</div>}
+        <div className="section-title">{t('flow.properties')}</div>
+        {!selected && !selectedEdge && <div className="empty-state">{t('flow.selectHint')}</div>}
         {selectedEdge && <>
-          <label>Route condition<input value={String((selectedEdge.data?.condition as string | null | undefined) || selectedEdge.label || '')} onChange={e => updateSelectedEdge(e.target.value)} placeholder="ex. cancellation or fallback" /></label>
-          <div className="field-hint">Conditional edges are matched against AI intent or decision values. Leave blank for the default route.</div>
-          <button className="danger-btn" onClick={deleteSelection}><Trash2 size={15} />Delete edge</button>
+          <label>{t('flow.routeCondition')}<input value={String((selectedEdge.data?.condition as string | null | undefined) || selectedEdge.label || '')} onChange={e => updateSelectedEdge(e.target.value)} placeholder={t('flow.routePlaceholder')} /></label>
+          <div className="field-hint">{t('flow.routeHint')}</div>
+          <button className="danger-btn" onClick={deleteSelection}><Trash2 size={15} />{t('flow.deleteEdge')}</button>
         </>}
         {selected && <>
-          <label>Label<input value={String(selected.data.label || '')} onChange={e => updateSelected('label', e.target.value)} /></label>
-          <div className="field-hint">Node ID: {selected.id}</div>
-          {kind === 'prompt' && <label>Message<textarea value={String(config.message || '')} onChange={e => updateSelected('config', { ...config, message: e.target.value })} /></label>}
+          <label>{t('flow.label')}<input value={String(selected.data.label || '')} onChange={e => updateSelected('label', e.target.value)} /></label>
+          <div className="field-hint">{t('flow.nodeId', { id: selected.id })}</div>
+          {kind === 'prompt' && <label>{t('flow.message')}<textarea value={String(config.message || '')} onChange={e => updateSelected('config', { ...config, message: e.target.value })} /></label>}
           {kind === 'collect_input' && <>
-            <label>Prompt<textarea value={String(config.prompt || '')} onChange={e => updateSelected('config', { ...config, prompt: e.target.value })} /></label>
-            <label>Variable<input value={String(config.variable || '')} onChange={e => updateSelected('config', { ...config, variable: e.target.value })} /></label>
+            <label>{t('flow.prompt')}<textarea value={String(config.prompt || '')} onChange={e => updateSelected('config', { ...config, prompt: e.target.value })} /></label>
+            <label>{t('flow.variable')}<input value={String(config.variable || '')} onChange={e => updateSelected('config', { ...config, variable: e.target.value })} /></label>
           </>}
           {kind === 'ai_intent' && <>
-            <label>Source variable<input value={String(config.source_variable || '')} onChange={e => updateSelected('config', { ...config, source_variable: e.target.value })} /></label>
-            <label>Result variable<input value={String(config.result_variable || '')} onChange={e => updateSelected('config', { ...config, result_variable: e.target.value })} /></label>
-            <label>Intents<textarea value={Array.isArray(config.intents) ? config.intents.join(', ') : ''} onChange={e => updateSelected('config', { ...config, intents: e.target.value.split(',').map(x => x.trim()).filter(Boolean) })} /></label>
+            <label>{t('flow.sourceVariable')}<input value={String(config.source_variable || '')} onChange={e => updateSelected('config', { ...config, source_variable: e.target.value })} /></label>
+            <label>{t('flow.resultVariable')}<input value={String(config.result_variable || '')} onChange={e => updateSelected('config', { ...config, result_variable: e.target.value })} /></label>
+            <label>{t('flow.intents')}<textarea value={Array.isArray(config.intents) ? config.intents.join(', ') : ''} onChange={e => updateSelected('config', { ...config, intents: e.target.value.split(',').map(x => x.trim()).filter(Boolean) })} /></label>
           </>}
-          {kind === 'decision' && <label>Variable<input value={String(config.variable || '')} onChange={e => updateSelected('config', { ...config, variable: e.target.value })} /></label>}
+          {kind === 'decision' && <label>{t('flow.variable')}<input value={String(config.variable || '')} onChange={e => updateSelected('config', { ...config, variable: e.target.value })} /></label>}
           {kind === 'set_variable' && <>
-            <label>Variable<input value={String(config.variable || '')} onChange={e => updateSelected('config', { ...config, variable: e.target.value })} /></label>
-            <label>Value<input value={String(config.value || '')} onChange={e => updateSelected('config', { ...config, value: e.target.value })} /></label>
+            <label>{t('flow.variable')}<input value={String(config.variable || '')} onChange={e => updateSelected('config', { ...config, variable: e.target.value })} /></label>
+            <label>{t('flow.value')}<input value={String(config.value || '')} onChange={e => updateSelected('config', { ...config, value: e.target.value })} /></label>
           </>}
           {kind === 'queue' && <>
-            <label>Queue name<input value={String(config.queue_name || '')} onChange={e => updateSelected('config', { ...config, queue_name: e.target.value })} /></label>
-            <label>Waiting message<textarea value={String(config.message || '')} onChange={e => updateSelected('config', { ...config, message: e.target.value })} /></label>
+            <label>{t('flow.queueName')}<input value={String(config.queue_name || '')} onChange={e => updateSelected('config', { ...config, queue_name: e.target.value })} /></label>
+            <label>{t('flow.waitingMessage')}<textarea value={String(config.message || '')} onChange={e => updateSelected('config', { ...config, message: e.target.value })} /></label>
           </>}
-          {kind === 'end' && <label>Final message<textarea value={String(config.message || '')} onChange={e => updateSelected('config', { ...config, message: e.target.value })} /></label>}
-          <div className="field-hint">Select an outgoing edge to edit its routing condition.</div>
-          {kind !== 'start' && <button className="danger-btn" onClick={deleteSelection}><Trash2 size={15} />Delete node</button>}
+          {kind === 'end' && <label>{t('flow.finalMessage')}<textarea value={String(config.message || '')} onChange={e => updateSelected('config', { ...config, message: e.target.value })} /></label>}
+          <div className="field-hint">{t('flow.edgeHint')}</div>
+          {kind !== 'start' && <button className="danger-btn" onClick={deleteSelection}><Trash2 size={15} />{t('flow.deleteNode')}</button>}
         </>}
       </aside>
     </div>

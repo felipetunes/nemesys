@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.7.0 — 2026-09-01
+
+### Added
+
+- Architect IVR catalog with persistent selection, alphabetical listing and localized timestamps.
+- New-IVR workflow that creates a valid starter graph with start and end nodes.
+- Localized contextual descriptions for every node type in the palette and canvas.
+- Pure frontend tests for IVR identifiers and starter-flow generation.
+
+### Changed
+
+- Architect opens on the IVR catalog instead of silently selecting the first available flow.
+- Saving, importing and creating flows now keep the catalog state synchronized.
+- Removed the GitHub shortcut from the application header.
+
+## 0.6.0 — 2026-09-01
+
+### Added
+
+- Brazilian Portuguese localization as the default interface, with persistent `PT-BR` and `EN-US` language selection.
+- Separate Architect and Collaborate application spaces with contextual navigation.
+- Collaborate agent queue with refresh, localized timestamps and session claiming.
+- Frontend translation and localized validation-message tests.
+
+### Changed
+
+- Flow design, simulation and architecture now live under Architect.
+- Operational metrics and human-agent work now live under Collaborate.
+- Browser speech recognition and synthesis follow the selected interface language.
+- Frontend Docker builds use `npm ci` and exclude local dependencies from the build context.
+
 ## 0.5.0 — 2026-09-01
 
 ### Added
