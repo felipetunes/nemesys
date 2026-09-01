@@ -45,14 +45,14 @@ export default function IvrNode({ data, selected }: NodeProps) {
   const Icon = icons[kind]
   return (
     <div className={`ivr-node ivr-node--${kind} ${selected ? 'is-selected' : ''}`} tabIndex={0} aria-label={`${String(data.label || kind)}. ${t(nodeDescriptionKeys[kind])}`}>
-      {kind !== 'start' && <Handle type="target" position={Position.Left} />}
+      {kind !== 'start' && <Handle type="target" position={Position.Top} />}
       <div className="ivr-node__icon"><Icon size={16} /></div>
       <div className="ivr-node__body">
         <span className="ivr-node__kind">{t(nodeLabelKeys[kind])}</span>
         <strong>{String(data.label || kind)}</strong>
       </div>
       <div className="ivr-node__tooltip" role="tooltip"><strong>{t(nodeLabelKeys[kind])}</strong><span>{t(nodeDescriptionKeys[kind])}</span></div>
-      {kind !== 'end' && <Handle type="source" position={Position.Right} />}
+      {kind !== 'end' && <Handle type="source" position={Position.Bottom} />}
     </div>
   )
 }

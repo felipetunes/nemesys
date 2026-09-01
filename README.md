@@ -4,7 +4,7 @@
 [![Release](https://img.shields.io/github/v/release/felipetunes/nemesys)](https://github.com/felipetunes/nemesys/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-7c5cff.svg)](LICENSE)
 
-**Current project version: `0.15.0` — persistent sign-in and safer account onboarding**
+**Current project version: `0.16.0` — focused profile navigation and vertical Architect flows**
 
 **A visual, AI-assisted IVR flow builder and runtime for learning, prototyping and portfolio demos.**
 
@@ -44,7 +44,7 @@ Traditional IVRs are often built inside proprietary platforms. Nemesys exposes t
 - persisted audit events for sensitive management operations;
 - timestamped generic webhooks with replay-window enforcement;
 - dependency vulnerability checks in CI and weekly automated update proposals;
-- a Brazilian Portuguese interface by default, with an in-app `PT-BR` / `EN-US` selector;
+- a Brazilian Portuguese interface by default, with login-language detection and profile-backed `PT-BR` / `EN-US` preferences;
 - distinct **Architect**, **Collaborate** and **Administration** product areas;
 - a Collaborate queue workspace where agents can inspect and claim waiting sessions;
 - a persistent Architect catalog for creating, selecting and evolving multiple IVRs;
@@ -57,14 +57,14 @@ Traditional IVRs are often built inside proprietary platforms. Nemesys exposes t
 - workspace user creation, roles, activation and removal from a dedicated administration area;
 - an authenticated, customer-centered agent desktop with inbox, journey context and wrap-up controls;
 - server-side agent identity enforcement that prevents an authenticated user from acting as another agent;
-- a persistent Help entry point and dismissible four-step quick-start guide;
-- a task-oriented editor with grouped nodes, contextual instructions, explicit file actions, unsaved-change protection and save-and-test workflow;
+- a compact profile menu with settings, contextual Help and sign-out, plus a dismissible four-step quick-start guide;
+- a task-oriented editor with collapsible action groups, explicit validation, vertical auto-layout, contextual instructions, unsaved-change protection and save-and-test workflow;
 - actionable agent guidance with one-click queue entry and clear next-step messaging;
 - progressive user-creation disclosure and plain-language role descriptions;
 - consistent keyboard focus and a skip-to-content shortcut for accessible navigation;
 - lazy-loaded visual editor for a substantially smaller initial application bundle;
 - searchable and sortable IVR catalog for growing workspaces;
-- progressive editor palette that presents essential nodes before advanced logic and data nodes;
+- an Architect-style toolbox that groups conversation, logic/data and resolution actions without hiding supported nodes;
 - visible editor keyboard shortcuts for saving and testing;
 - customer-first simulator with execution traces and session variables available on demand;
 - a dedicated login portal that places every workspace behind an authenticated user by default;
@@ -83,9 +83,9 @@ Nemesys separates design-time and operational responsibilities while keeping one
 - **Collaborate** contains operational metrics and a customer-centered agent desktop with presence, routing status, inbox, journey context and after-call work.
 - **Administration** contains workspace user creation, role assignment, activation/deactivation and member removal.
 
-Before login, the interface follows the browser and operating-system language, mapping Portuguese variants to `pt-BR` and English variants to `en-US`. After authentication, the preference saved in the user's profile takes priority and follows that person across workspaces and devices. The top-bar and account selectors update this profile preference.
+Before login, the interface follows the browser and operating-system language, mapping Portuguese variants to `pt-BR` and English variants to `en-US`. After authentication, the preference saved in the user's profile takes priority and follows that person across workspaces and devices. Language and workspace controls live under the avatar's **Settings** option so the primary navigation stays focused.
 
-New users receive a four-step guide from IVR selection through browser testing and agent operation. The permanent **Help** action offers task-based shortcuts, and the guide can be dismissed without removing access to help.
+New users receive a four-step guide from IVR selection through browser testing and agent operation. **Help** remains available from the avatar menu with task-based shortcuts, and the guide can be dismissed without removing access to help.
 
 ## Demo flow
 

@@ -10,8 +10,10 @@ import {
   type Connection,
   type Edge,
   type Node,
+  type ReactFlowInstance,
 } from '@xyflow/react'
-import { Bot, ChevronDown, CircleStop, Download, FileUp, Flag, GitBranch, Headphones, MessageSquareText, MousePointerClick, Play, PlayCircle, Plus, Save, ShieldCheck, Sparkles, Trash2, UploadCloud, Variable } from 'lucide-react'
+import { AlignVerticalJustifyCenter, Bot, ChevronDown, CircleCheck, CircleStop, Download, FileUp, Flag, GitBranch, Headphones, MessageSquareText, MousePointerClick, Play, PlayCircle, Plus, Save, ShieldCheck, Trash2, UploadCloud, Variable } from 'lucide-react'
+import { layoutFlowVertically } from '../flowLayout'
 import { useI18n, type TranslationKey } from '../i18n'
 import IvrNode from './IvrNode'
 import type { FlowDefinition, FlowNode, NodeKind } from '../types'
@@ -20,12 +22,14 @@ interface Props {
   readOnly: boolean
   flow: FlowDefinition
   onSave: (flow: FlowDefinition) => Promise<boolean>
+  onValidate: (flow: FlowDefinition) => Promise<boolean>
   onPublish: (flow: FlowDefinition) => Promise<boolean>
   onExport: (flow: FlowDefinition) => void
   onImport: (file: File) => Promise<void>
   onTest: () => void
   onDirtyChange: (dirty: boolean) => void
   saving: boolean
+  validating: boolean
   publishing: boolean
   importing: boolean
   publishedVersion: number | null
@@ -42,8 +46,13 @@ const palette: { type: NodeKind; icon: typeof Play }[] = [
   { type: 'end', icon: CircleStop },
 ]
 
-const essentialNodeTypes: NodeKind[] = ['prompt', 'collect_input', 'queue', 'end']
-const advancedNodeTypes: NodeKind[] = ['ai_intent', 'decision', 'set_variable', 'set_outcome']
+type PaletteGroupId = 'conversation' | 'logic' | 'resolution'
+
+const paletteGroups: { id: PaletteGroupId; label: TranslationKey; icon: typeof Play; types: NodeKind[] }[] = [
+  { id: 'conversation', label: 'flow.groupConversation', icon: MessageSquareText, types: ['prompt', 'collect_input', 'ai_intent'] },
+  { id: 'logic', label: 'flow.groupLogic', icon: GitBranch, types: ['decision', 'set_variable', 'set_outcome'] },
+  { id: 'resolution', label: 'flow.groupResolution', icon: Headphones, types: ['queue', 'end'] },
+]
 
 const nodeLabelKeys: Record<NodeKind, TranslationKey> = {
   start: 'node.start',
@@ -73,18 +82,19 @@ function toRfNode(n: FlowNode): Node {
   return { id: n.id, type: 'ivr', position: { x: n.x, y: n.y }, data: { label: n.label, kind: n.type, config: n.config } }
 }
 
-export default function FlowEditor({ readOnly, flow, onSave, onPublish, onExport, onImport, onTest, onDirtyChange, saving, publishing, importing, publishedVersion }: Props) {
+export default function FlowEditor({ readOnly, flow, onSave, onValidate, onPublish, onExport, onImport, onTest, onDirtyChange, saving, validating, publishing, importing, publishedVersion }: Props) {
   const { t } = useI18n()
-  const [nodes, setNodes, onNodesChange] = useNodesState(flow.nodes.map(toRfNode))
-  const [edges, setEdges, onEdgesChange] = useEdgesState(
-    flow.edges.map(e => ({ id: e.id, source: e.source, target: e.target, label: e.label || e.condition || undefined, data: { condition: e.condition } })),
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>(layoutFlowVertically(flow.nodes, flow.edges).map(toRfNode))
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(
+    flow.edges.map((e): Edge => ({ id: e.id, source: e.source, target: e.target, label: e.label || e.condition || undefined, data: { condition: e.condition }, type: 'smoothstep' })),
   )
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
-  const [showAdvanced, setShowAdvanced] = useState(false)
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<PaletteGroupId, boolean>>({ conversation: false, logic: false, resolution: false })
   const [dirty, setDirty] = useState(false)
   const importInput = useRef<HTMLInputElement>(null)
   const [toFlowPosition, setToFlowPosition] = useState<((position: { x: number; y: number }) => { x: number; y: number }) | null>(null)
+  const [flowInstance, setFlowInstance] = useState<ReactFlowInstance<Node, Edge> | null>(null)
   const nodeTypes = useMemo(() => ({ ivr: IvrNode }), [])
   const selected = nodes.find(n => n.id === selectedId)
   const selectedEdge = edges.find(e => e.id === selectedEdgeId)
@@ -103,7 +113,7 @@ export default function FlowEditor({ readOnly, flow, onSave, onPublish, onExport
     if (readOnly) return
     setDirty(true)
     onDirtyChange(true)
-    setEdges(eds => addEdge({ ...connection, id: `e-${crypto.randomUUID()}` }, eds))
+    setEdges(eds => addEdge({ ...connection, id: `e-${crypto.randomUUID()}`, type: 'smoothstep' }, eds))
   }, [onDirtyChange, readOnly, setEdges])
 
   const handleNodesChange = useCallback((changes: Parameters<typeof onNodesChange>[0]) => {
@@ -138,7 +148,7 @@ export default function FlowEditor({ readOnly, flow, onSave, onPublish, onExport
     const node: Node = {
       id,
       type: 'ivr',
-      position: position ?? { x: 420 + (nodes.length % 3) * 40, y: 120 + (nodes.length % 7) * 60 },
+      position: position ?? { x: 520 + ((nodes.length % 3) - 1) * 45, y: Math.max(70, ...nodes.map(item => item.position.y)) + 140 },
       data: { label: t(nodeLabelKeys[kind]), kind, config: defaults[kind] },
     }
     setNodes(items => [...items, node])
@@ -160,6 +170,23 @@ export default function FlowEditor({ readOnly, flow, onSave, onPublish, onExport
     setDirty(true)
     onDirtyChange(true)
     setNodes(items => items.map(n => n.id === selectedId ? { ...n, data: { ...n.data, [field]: value } } : n))
+  }
+
+  const arrangeVertically = () => {
+    const currentNodes: FlowNode[] = nodes.map(node => ({
+      id: node.id,
+      type: node.data.kind as NodeKind,
+      label: String(node.data.label),
+      x: node.position.x,
+      y: node.position.y,
+      config: node.data.config as Record<string, unknown>,
+    }))
+    const currentEdges = edges.map(edge => ({ id: edge.id, source: edge.source, target: edge.target }))
+    const positions = new Map(layoutFlowVertically(currentNodes, currentEdges).map(node => [node.id, { x: node.x, y: node.y }]))
+    setNodes(items => items.map(node => ({ ...node, position: positions.get(node.id) ?? node.position })))
+    setDirty(true)
+    onDirtyChange(true)
+    window.requestAnimationFrame(() => void flowInstance?.fitView({ padding: 0.18, duration: 280 }))
   }
 
   const updateSelectedEdge = (condition: string) => {
@@ -260,14 +287,17 @@ export default function FlowEditor({ readOnly, flow, onSave, onPublish, onExport
   return (
     <div className="editor-layout" onKeyDown={handleEditorKeyDown}>
       <aside className="palette panel">
-        <div className="section-title"><Plus size={15} /> {t('flow.nodes')}</div>
+        <div className="section-title"><Plus size={15} /> {t('flow.toolbox')}</div>
         {readOnly ? <div className="editor-readonly-note"><ShieldCheck size={22} /><strong>{t('flow.readOnlyTitle')}</strong><span>{t('flow.readOnlyDescription')}</span></div> : <>
           <p className="palette-instruction">{t('flow.paletteInstruction')}</p>
-          <div className="palette-group"><span>{t('flow.groupEssential')}</span>{essentialNodeTypes.map(renderPaletteButton)}</div>
-          <div className={`palette-advanced${showAdvanced ? ' open' : ''}`}>
-            <button className="palette-advanced-toggle" aria-expanded={showAdvanced} onClick={() => setShowAdvanced(current => !current)}><Sparkles size={14} /><span><strong>{t('flow.groupAdvanced')}</strong><small>{t('flow.groupAdvancedDescription')}</small></span><ChevronDown size={14} /></button>
-            {showAdvanced && <div className="palette-group">{advancedNodeTypes.map(renderPaletteButton)}</div>}
-          </div>
+          {paletteGroups.map(group => {
+            const GroupIcon = group.icon
+            const collapsed = collapsedGroups[group.id]
+            return <section className={`toolbox-group${collapsed ? ' collapsed' : ''}`} key={group.id}>
+              <button className="toolbox-group-toggle" type="button" aria-expanded={!collapsed} onClick={() => setCollapsedGroups(current => ({ ...current, [group.id]: !current[group.id] }))}><GroupIcon size={14} /><strong>{t(group.label)}</strong><span>{group.types.length}</span><ChevronDown size={14} /></button>
+              {!collapsed && <div className="palette-group">{group.types.map(renderPaletteButton)}</div>}
+            </section>
+          })}
           <div className="palette-note"><Play size={14} /> {t('flow.paletteNote')}</div>
           <div className="editor-shortcuts"><span>{t('flow.shortcuts')}</span><div><kbd>Ctrl</kbd><kbd>S</kbd>{t('flow.shortcutSave')}</div><div><kbd>Ctrl</kbd><kbd>Enter</kbd>{t('flow.shortcutTest')}</div></div>
         </>}
@@ -290,9 +320,11 @@ export default function FlowEditor({ readOnly, flow, onSave, onPublish, onExport
             />
             {!readOnly && <button className="secondary-btn toolbar-file-action" title={t('flow.import')} disabled={saving || publishing || importing} onClick={() => importInput.current?.click()}><FileUp size={16} /><span className="button-label">{t('flow.importShort')}</span></button>}
             <button className="secondary-btn toolbar-file-action" title={t('flow.export')} disabled={saving || publishing || importing} onClick={() => onExport(buildFlow())}><Download size={16} /><span className="button-label">{t('flow.exportShort')}</span></button>
-            {!readOnly && <button className="secondary-btn" title={t('flow.shortcutSaveTitle')} disabled={saving || publishing || importing} onClick={() => void saveDraft()}><Save size={16} />{saving ? t('flow.saving') : t('flow.saveDraft')}</button>}
-            {!readOnly && <button className="secondary-btn guided-action" title={t('flow.shortcutTestTitle')} disabled={saving || publishing || importing} onClick={() => void saveAndTest()}><PlayCircle size={16} />{t('flow.saveAndTest')}</button>}
-            {!readOnly && <button className="primary-btn" disabled={saving || publishing || importing} onClick={() => void publishFlow()}><UploadCloud size={16} />{publishing ? t('flow.publishing') : t('flow.publish')}</button>}
+            {!readOnly && <button className="secondary-btn toolbar-file-action" title={t('flow.layoutVerticalTitle')} disabled={saving || validating || publishing || importing} onClick={arrangeVertically}><AlignVerticalJustifyCenter size={16} /><span className="button-label">{t('flow.layoutVertical')}</span></button>}
+            <button className="secondary-btn" disabled={saving || validating || publishing || importing} onClick={() => void onValidate(buildFlow())}><CircleCheck size={16} />{validating ? t('flow.validating') : t('flow.validate')}</button>
+            {!readOnly && <button className="secondary-btn" title={t('flow.shortcutSaveTitle')} disabled={saving || validating || publishing || importing} onClick={() => void saveDraft()}><Save size={16} />{saving ? t('flow.saving') : t('flow.saveDraft')}</button>}
+            {!readOnly && <button className="secondary-btn guided-action" title={t('flow.shortcutTestTitle')} disabled={saving || validating || publishing || importing} onClick={() => void saveAndTest()}><PlayCircle size={16} />{t('flow.saveAndTest')}</button>}
+            {!readOnly && <button className="primary-btn" disabled={saving || validating || publishing || importing} onClick={() => void publishFlow()}><UploadCloud size={16} />{publishing ? t('flow.publishing') : t('flow.publish')}</button>}
           </div>
         </div>
         <div className="flow-area">
@@ -302,7 +334,10 @@ export default function FlowEditor({ readOnly, flow, onSave, onPublish, onExport
             onNodesChange={handleNodesChange}
             onEdgesChange={handleEdgesChange}
             onConnect={onConnect}
-            onInit={instance => setToFlowPosition(() => (position: { x: number; y: number }) => instance.screenToFlowPosition(position))}
+            onInit={instance => {
+              setFlowInstance(instance)
+              setToFlowPosition(() => (position: { x: number; y: number }) => instance.screenToFlowPosition(position))
+            }}
             onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy' }}
             onDrop={dropNode}
             onNodeClick={(_, node) => { setSelectedId(node.id); setSelectedEdgeId(null) }}

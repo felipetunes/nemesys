@@ -15,6 +15,8 @@ describe('flow factory', () => {
     })
 
     expect(flow.nodes.map(node => node.type)).toEqual(['start', 'end'])
+    expect(flow.nodes[0].x).toBe(flow.nodes[1].x)
+    expect(flow.nodes[0].y).toBeLessThan(flow.nodes[1].y)
     expect(flow.edges).toEqual([{ id: 'start-to-end', source: 'start', target: 'end', condition: null, label: null }])
   })
 })

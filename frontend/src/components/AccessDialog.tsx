@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { KeyRound, LogIn, LogOut, Mail, ShieldCheck, UserPlus, X } from 'lucide-react'
+import { KeyRound, LogIn, LogOut, Mail, Settings, ShieldCheck, UserPlus, X } from 'lucide-react'
 import { api } from '../api'
 import { setAuthSession } from '../authStorage'
 import { useI18n, type Language, type TranslationKey } from '../i18n'
@@ -47,7 +47,7 @@ export default function AccessDialog({ configured, currentUser, ownerRegistratio
   return <div className="dialog-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onClose() }}>
     <section className="access-dialog panel" role="dialog" aria-modal="true" aria-label={t('access.dialogLabel')}>
       <button className="dialog-close" aria-label={t('access.close')} onClick={onClose}><X size={17} /></button>
-      <div className="access-icon"><KeyRound size={22} /></div>
+      <div className="access-icon">{configured && currentUser ? <Settings size={22} /> : <KeyRound size={22} />}</div>
       {configured && currentUser ? <>
         <h2>{t('account.title')}</h2>
         <p>{t('account.description')}</p>

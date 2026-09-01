@@ -4,12 +4,9 @@ import {
   BarChart3,
   Bot,
   Cable,
-  CircleHelp,
   GitBranch,
   Headphones,
   History,
-  KeyRound,
-  Languages,
   ListTree,
   LoaderCircle,
   Network,
@@ -27,6 +24,7 @@ import CollaborateQueue from './components/CollaborateQueue'
 import FlowCatalog from './components/FlowCatalog'
 import HelpCenter, { GettingStarted, type LearningDestination } from './components/LearningGuide'
 import MetricsDashboard from './components/MetricsDashboard'
+import ProfileMenu from './components/ProfileMenu'
 import Simulator from './components/Simulator'
 import VersionHistory from './components/VersionHistory'
 import { createFlowId, createStarterFlow } from './flowFactory'
@@ -51,7 +49,7 @@ function initialApplication(): Application {
 }
 
 export default function App() {
-  const { language, setLanguage, t } = useI18n()
+  const { setLanguage, t } = useI18n()
   const [flows, setFlows] = useState<FlowDefinition[]>([])
   const [flow, setFlow] = useState<FlowDefinition | null>(null)
   const [historyFlow, setHistoryFlow] = useState<FlowDefinition | null>(null)
@@ -60,6 +58,7 @@ export default function App() {
   const [collaborateTab, setCollaborateTab] = useState<CollaborateTab>('overview')
   const [flowLoading, setFlowLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [validating, setValidating] = useState(false)
   const [publishing, setPublishing] = useState(false)
   const [importing, setImporting] = useState(false)
   const [creatingFlow, setCreatingFlow] = useState(false)
@@ -286,6 +285,21 @@ export default function App() {
     finally { setSaving(false) }
   }
 
+  const validate = async (next: FlowDefinition) => {
+    setValidating(true); setNotice(''); setActionError('')
+    try {
+      const result = await api.validateFlow(next)
+      if (!result.valid) throw new Error(validationErrorMessage(result))
+      showNotice(validationSuccessMessage(result, t('notice.flowValid'), count => t('validation.warningCount', { count })))
+      return true
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : String(error))
+      return false
+    } finally {
+      setValidating(false)
+    }
+  }
+
   const publish = async (next: FlowDefinition) => {
     setPublishing(true); setNotice(''); setActionError('')
     try {
@@ -503,15 +517,12 @@ export default function App() {
           </div>
 
           <div className="topbar-actions">
-            <label className="language-picker" title={t('actions.language')}>
-              <Languages size={16} />
-              <select aria-label={t('actions.language')} value={language} onChange={event => void changeLanguage(event.target.value as Language)}>
-                <option value="pt-BR">PT-BR</option>
-                <option value="en-US">EN-US</option>
-              </select>
-            </label>
-            <button className="help-btn" onClick={() => setShowHelp(true)} title={t('actions.help')}><CircleHelp size={16} />{t('actions.help')}</button>
-            <button className={`access-btn${hasManagementToken ? ' configured' : ' demo'}`} onClick={() => setShowAccess(true)} title={t('actions.configureAccess')}><KeyRound size={16} /><span>{currentUser?.email || t('authPortal.demoMode')}</span></button>
+            <ProfileMenu
+              currentUser={currentUser}
+              onOpenSettings={() => setShowAccess(true)}
+              onOpenHelp={() => setShowHelp(true)}
+              onSignOut={clearAccess}
+            />
           </div>
         </div>
 
@@ -554,7 +565,7 @@ export default function App() {
           {flowError && <div className="error-box top-error">{flowError}</div>}
           {flowLoading && <div className="loading"><LoaderCircle className="spin" />{t('app.loadingFlow')}</div>}
           {!flowLoading && architectTab === 'ivrs' && <FlowCatalog canEdit={canEdit} canAdminister={canAdminister} flows={flows} selectedFlowId={flow?.id ?? null} creating={creatingFlow} busyFlowId={busyFlowId} onCreate={createFlow} onOpen={openFlow} onHistory={openHistory} onDuplicate={duplicateFlow} onArchive={archiveFlow} onRestore={restoreFlow} onDelete={deleteFlow} />}
-          {!flowLoading && architectTab === 'editor' && (flow ? <Suspense fallback={<div className="loading"><LoaderCircle className="spin" />{t('app.loadingEditor')}</div>}><FlowEditor key={`${flow.id}:${flow.updated_at ?? ''}`} readOnly={!canEdit} flow={flow} onSave={save} onPublish={publish} onExport={exportFlow} onImport={importFlow} onTest={() => setArchitectTab('simulator')} onDirtyChange={setEditorDirty} saving={saving} publishing={publishing} importing={importing} publishedVersion={publishedVersion} /></Suspense> : <FlowSelectionRequired onBack={() => openArchitectTab('ivrs')} />)}
+          {!flowLoading && architectTab === 'editor' && (flow ? <Suspense fallback={<div className="loading"><LoaderCircle className="spin" />{t('app.loadingEditor')}</div>}><FlowEditor key={`${flow.id}:${flow.updated_at ?? ''}`} readOnly={!canEdit} flow={flow} onSave={save} onValidate={validate} onPublish={publish} onExport={exportFlow} onImport={importFlow} onTest={() => setArchitectTab('simulator')} onDirtyChange={setEditorDirty} saving={saving} validating={validating} publishing={publishing} importing={importing} publishedVersion={publishedVersion} /></Suspense> : <FlowSelectionRequired onBack={() => openArchitectTab('ivrs')} />)}
           {!flowLoading && architectTab === 'simulator' && (canEdit ? flow ? <Simulator flow={flow} /> : <FlowSelectionRequired onBack={() => setArchitectTab('ivrs')} /> : <AccessRestricted />)}
           {!flowLoading && architectTab === 'history' && ((historyFlow ?? flow) ? <VersionHistory key={`${(historyFlow ?? flow)!.id}:${(historyFlow ?? flow)!.updated_at ?? ''}`} canRestore={canEdit} flow={(historyFlow ?? flow)!} restoring={restoringVersion} onRestore={restoreFlowVersion} /> : <FlowSelectionRequired onBack={() => setArchitectTab('ivrs')} />)}
           {!flowLoading && architectTab === 'architecture' && <Architecture />}

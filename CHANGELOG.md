@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.16.0 — 2026-09-01
+
+### Added
+
+- Compact profile-avatar menu with account summary, settings, contextual help and sign-out actions.
+- Explicit flow validation and one-click top-to-bottom layout controls in the Architect toolbar.
+- Deterministic vertical graph layout with automated coverage for branches and malformed cyclic input.
+
+### Changed
+
+- Language and workspace preferences now live in account settings instead of occupying the authenticated top bar.
+- The visual editor uses top/bottom connection handles, smooth vertical routes and top-down starter-flow positions.
+- The Architect toolbox now exposes every supported action in collapsible Conversation, Logic and data, and Resolution groups.
+- Help remains available from the profile menu without adding a permanent button to the primary navigation.
+
 ## 0.15.0 — 2026-09-01
 
 ### Added
