@@ -253,14 +253,35 @@ async def test_queue_session_can_be_claimed_by_simulated_agent(api_client):
     queued = await client.post(f"/api/sessions/{session_id}/input", json={"value": "0"})
 
     waiting = await client.get("/api/queue")
+    blocked = await client.post(f"/api/queue/{session_id}/claim", json={"agent_name": "Test Agent"})
+    presence = await client.put("/api/agents/Test%20Agent/presence", json={"presence": "on_queue"})
     claimed = await client.post(f"/api/queue/{session_id}/claim", json={"agent_name": "Test Agent"})
+    assigned = await client.get("/api/queue/assigned", params={"agent_name": "Test Agent"})
+    agents_during_interaction = await client.get("/api/agents")
+    wrapped_up = await client.post(
+        f"/api/queue/{session_id}/wrap-up",
+        json={"code": "resolved", "notes": "Customer request resolved."},
+    )
+    assigned_after_wrap_up = await client.get("/api/queue/assigned", params={"agent_name": "Test Agent"})
+    agents_after_wrap_up = await client.get("/api/agents")
 
     assert queued.status_code == 200
     assert queued.json()["status"] == "queued"
     assert [session["id"] for session in waiting.json()] == [session_id]
+    assert blocked.status_code == 409
+    assert presence.status_code == 200
+    assert presence.json()["routing_status"] == "idle"
     assert claimed.status_code == 200
-    assert claimed.json()["status"] == "completed"
+    assert claimed.json()["status"] == "wrap_up"
     assert claimed.json()["assigned_agent"] == "Test Agent"
+    assert [session["id"] for session in assigned.json()] == [session_id]
+    assert agents_during_interaction.json()[0]["routing_status"] == "interacting"
+    assert wrapped_up.status_code == 200
+    assert wrapped_up.json()["status"] == "completed"
+    assert wrapped_up.json()["wrap_up_code"] == "resolved"
+    assert wrapped_up.json()["wrap_up_notes"] == "Customer request resolved."
+    assert assigned_after_wrap_up.json() == []
+    assert agents_after_wrap_up.json()[0]["routing_status"] == "idle"
 
 
 @pytest.mark.anyio
@@ -462,7 +483,7 @@ async def test_health_endpoints_and_security_headers(api_client):
     response = await client.get("/health/ready", headers={"X-Request-ID": "test-request-123"})
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ready", "version": "0.8.0"}
+    assert response.json() == {"status": "ready", "version": "0.9.0"}
     assert response.headers["x-request-id"] == "test-request-123"
     assert response.headers["x-content-type-options"] == "nosniff"
     assert response.headers["x-frame-options"] == "DENY"

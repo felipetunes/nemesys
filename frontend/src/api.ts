@@ -1,4 +1,4 @@
-import type { AuthTokenResponse, CallSession, FlowDefinition, FlowValidationResult, MetricsSummary } from './types'
+import type { AgentPresence, AgentState, AuthTokenResponse, CallSession, FlowDefinition, FlowValidationResult, MetricsSummary, WrapUpCode } from './types'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
@@ -47,7 +47,11 @@ export const api = {
   submitInput: (sessionId: string, value: string) => request<CallSession>(`/api/sessions/${sessionId}/input`, { method: 'POST', body: JSON.stringify({ value }) }),
   getMetrics: () => request<MetricsSummary>('/api/operations/metrics'),
   listQueuedSessions: () => request<CallSession[]>('/api/queue'),
+  listAssignedSessions: (agentName: string) => request<CallSession[]>(`/api/queue/assigned?agent_name=${encodeURIComponent(agentName)}`),
   claimQueueSession: (sessionId: string, agentName: string) => request<CallSession>(`/api/queue/${sessionId}/claim`, { method: 'POST', body: JSON.stringify({ agent_name: agentName }) }),
+  completeWrapUp: (sessionId: string, code: WrapUpCode, notes: string) => request<CallSession>(`/api/queue/${sessionId}/wrap-up`, { method: 'POST', body: JSON.stringify({ code, notes }) }),
+  listAgentStates: () => request<AgentState[]>('/api/agents'),
+  updateAgentPresence: (agentName: string, presence: AgentPresence) => request<AgentState>(`/api/agents/${encodeURIComponent(agentName)}/presence`, { method: 'PUT', body: JSON.stringify({ presence }) }),
   login: (email: string, password: string) => request<AuthTokenResponse>('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
   register: (email: string, password: string, workspaceName: string) => request<AuthTokenResponse>('/api/auth/register', { method: 'POST', body: JSON.stringify({ email, password, workspace_name: workspaceName }) }),
 }

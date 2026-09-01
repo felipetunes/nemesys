@@ -11,7 +11,7 @@ import {
   type Edge,
   type Node,
 } from '@xyflow/react'
-import { Bot, CircleStop, Download, FileUp, GitBranch, Headphones, MessageSquareText, MousePointerClick, Play, Plus, Save, Trash2, UploadCloud, Variable } from 'lucide-react'
+import { Bot, CircleStop, Download, FileUp, Flag, GitBranch, Headphones, MessageSquareText, MousePointerClick, Play, Plus, Save, Trash2, UploadCloud, Variable } from 'lucide-react'
 import { useI18n, type TranslationKey } from '../i18n'
 import IvrNode from './IvrNode'
 import type { FlowDefinition, FlowNode, NodeKind } from '../types'
@@ -34,6 +34,7 @@ const palette: { type: NodeKind; icon: typeof Play }[] = [
   { type: 'ai_intent', icon: Bot },
   { type: 'decision', icon: GitBranch },
   { type: 'set_variable', icon: Variable },
+  { type: 'set_outcome', icon: Flag },
   { type: 'queue', icon: Headphones },
   { type: 'end', icon: CircleStop },
 ]
@@ -45,6 +46,7 @@ const nodeLabelKeys: Record<NodeKind, TranslationKey> = {
   ai_intent: 'node.ai_intent',
   decision: 'node.decision',
   set_variable: 'node.set_variable',
+  set_outcome: 'node.set_outcome',
   queue: 'node.queue',
   end: 'node.end',
 }
@@ -56,6 +58,7 @@ const nodeDescriptionKeys: Record<NodeKind, TranslationKey> = {
   ai_intent: 'node.ai_intentDescription',
   decision: 'node.decisionDescription',
   set_variable: 'node.set_variableDescription',
+  set_outcome: 'node.set_outcomeDescription',
   queue: 'node.queueDescription',
   end: 'node.endDescription',
 }
@@ -91,6 +94,7 @@ export default function FlowEditor({ flow, onSave, onPublish, onExport, onImport
       ai_intent: { source_variable: 'input', result_variable: 'intent', intents: ['option_a', 'fallback'] },
       decision: { variable: 'intent' },
       set_variable: { variable: 'name', value: 'value' },
+      set_outcome: { name: 'customer_goal', result: 'success' },
       queue: { queue_name: 'customer-care', message: t('node.defaultQueueMessage') },
       end: { message: t('node.defaultEndMessage') },
     }
@@ -237,6 +241,10 @@ export default function FlowEditor({ flow, onSave, onPublish, onExport, onImport
           {kind === 'set_variable' && <>
             <label>{t('flow.variable')}<input value={String(config.variable || '')} onChange={e => updateSelected('config', { ...config, variable: e.target.value })} /></label>
             <label>{t('flow.value')}<input value={String(config.value || '')} onChange={e => updateSelected('config', { ...config, value: e.target.value })} /></label>
+          </>}
+          {kind === 'set_outcome' && <>
+            <label>{t('flow.outcomeName')}<input value={String(config.name || '')} onChange={e => updateSelected('config', { ...config, name: e.target.value })} /></label>
+            <label>{t('flow.outcomeResult')}<select value={String(config.result || 'success')} onChange={e => updateSelected('config', { ...config, result: e.target.value })}><option value="success">{t('flow.outcomeSuccess')}</option><option value="failure">{t('flow.outcomeFailure')}</option></select></label>
           </>}
           {kind === 'queue' && <>
             <label>{t('flow.queueName')}<input value={String(config.queue_name || '')} onChange={e => updateSelected('config', { ...config, queue_name: e.target.value })} /></label>

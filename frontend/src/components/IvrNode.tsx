@@ -1,5 +1,5 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react'
-import { Bot, CircleStop, GitBranch, Headphones, MessageSquareText, MousePointerClick, Play, Variable } from 'lucide-react'
+import { Bot, CircleStop, Flag, GitBranch, Headphones, MessageSquareText, MousePointerClick, Play, Variable } from 'lucide-react'
 import { useI18n, type TranslationKey } from '../i18n'
 import type { NodeKind } from '../types'
 
@@ -10,6 +10,7 @@ const icons: Record<NodeKind, typeof Play> = {
   ai_intent: Bot,
   decision: GitBranch,
   set_variable: Variable,
+  set_outcome: Flag,
   queue: Headphones,
   end: CircleStop,
 }
@@ -21,6 +22,7 @@ const nodeLabelKeys: Record<NodeKind, TranslationKey> = {
   ai_intent: 'node.ai_intent',
   decision: 'node.decision',
   set_variable: 'node.set_variable',
+  set_outcome: 'node.set_outcome',
   queue: 'node.queue',
   end: 'node.end',
 }
@@ -32,6 +34,7 @@ const nodeDescriptionKeys: Record<NodeKind, TranslationKey> = {
   ai_intent: 'node.ai_intentDescription',
   decision: 'node.decisionDescription',
   set_variable: 'node.set_variableDescription',
+  set_outcome: 'node.set_outcomeDescription',
   queue: 'node.queueDescription',
   end: 'node.endDescription',
 }

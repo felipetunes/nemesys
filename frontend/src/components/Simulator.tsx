@@ -32,6 +32,7 @@ const statusLabelKeys: Record<CallSession['status'] | 'idle', TranslationKey> = 
   running: 'status.running',
   waiting_input: 'status.waiting_input',
   queued: 'status.queued',
+  wrap_up: 'status.wrap_up',
   completed: 'status.completed',
   failed: 'status.failed',
 }
@@ -64,14 +65,6 @@ export default function Simulator({ flow }: Props) {
     finally { setBusy(false) }
   }
 
-  const connectAgent = async () => {
-    if (!session) return
-    setBusy(true); setError('')
-    try { setSession(await api.claimQueueSession(session.id, t('simulator.browserAgent'))) }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)) }
-    finally { setBusy(false) }
-  }
-
   const listen = async () => {
     setListening(true); setError('')
     try { setInput(await speech.listen(language)) }
@@ -97,7 +90,7 @@ export default function Simulator({ flow }: Props) {
             {speech.canRecognize && <button className={`voice-btn${listening ? ' listening' : ''}`} title={t('simulator.microphone')} aria-label={t('simulator.microphone')} disabled={busy || listening} onClick={listen}><Mic size={16} /></button>}
             <button className="primary-btn" disabled={busy || !input.trim()} onClick={submit}><Send size={16} />{t('simulator.send')}</button>
           </div>}
-          {session.status === 'queued' && <div className="queue-dock"><Headset size={20} /><div><strong>{t('simulator.waitingIn', { queue: session.queue_name || '—' })}</strong><span>{t('simulator.queueHint')}</span></div><button className="primary-btn" disabled={busy} onClick={connectAgent}>{busy ? t('simulator.connecting') : t('simulator.connectAgent')}</button></div>}
+          {session.status === 'queued' && <div className="queue-dock"><Headset size={20} /><div><strong>{t('simulator.waitingIn', { queue: session.queue_name || '—' })}</strong><span>{t('simulator.queueHint')}</span></div></div>}
           {(session.status === 'completed' || session.status === 'failed') && <button className="secondary-btn restart" onClick={start}><RotateCcw size={16} />{t('simulator.runAgain')}</button>}
         </div>}
         {error && <div className="error-box">{error}</div>}

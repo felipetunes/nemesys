@@ -11,10 +11,13 @@ from app.models import (
     DecisionConfig,
     FlowDefinition,
     FlowNode,
+    FlowOutcome,
+    FlowOutcomeConfig,
     MessageConfig,
     QueueConfig,
     SetVariableConfig,
     TraceEvent,
+    WrapUpCode,
 )
 from app.services.intent_classifier import IntentClassifier
 
@@ -81,10 +84,32 @@ class FlowEngine:
         self.run(flow, session)
         return session
 
+    def complete_wrap_up(
+        self,
+        session: CallSession,
+        code: WrapUpCode,
+        notes: str | None = None,
+    ) -> CallSession:
+        if session.status != "wrap_up" or not session.assigned_agent:
+            raise FlowEngineError("Session is not waiting for after-call work")
+        session.wrap_up_code = code
+        session.wrap_up_notes = notes
+        session.wrapped_up_at = datetime.now(UTC)
+        session.status = "completed"
+        self._event(
+            session,
+            "wrap_up_completed",
+            session.current_node_id,
+            f"After-call work completed with {code}",
+            {"code": code, "notes_length": len(notes or "")},
+        )
+        self._event(session, "session_completed", session.current_node_id, "Session completed")
+        return session
+
     def run(self, flow: FlowDefinition, session: CallSession, max_steps: int = 50) -> None:
         node_map = {n.id: n for n in flow.nodes}
         for _ in range(max_steps):
-            if session.status in ("waiting_input", "queued", "completed", "failed"):
+            if session.status in ("waiting_input", "queued", "wrap_up", "completed", "failed"):
                 return
             node = node_map.get(session.current_node_id or "")
             if not node:
@@ -137,6 +162,20 @@ class FlowEngine:
             self._event(session, "variable_set", node.id, f"{variable} updated", {"variable": variable, "value": value})
             return self._advance_unconditional(flow, session)
 
+        if node.type == "set_outcome":
+            assert isinstance(node.config, FlowOutcomeConfig)
+            outcome = FlowOutcome(name=node.config.name, result=node.config.result)
+            session.outcomes = [existing for existing in session.outcomes if existing.name != outcome.name]
+            session.outcomes.append(outcome)
+            self._event(
+                session,
+                "flow_outcome",
+                node.id,
+                f"Outcome {outcome.name} set to {outcome.result}",
+                {"name": outcome.name, "result": outcome.result},
+            )
+            return self._advance_unconditional(flow, session)
+
         if node.type == "ai_intent":
             assert isinstance(node.config, AiIntentConfig)
             source = node.config.source_variable
@@ -186,8 +225,19 @@ class FlowEngine:
             if message:
                 session.last_prompt = message
                 self._event(session, "prompt", node.id, message)
-            session.status = "completed"
-            self._event(session, "session_completed", node.id, "Session completed")
+            self._event(session, "interaction_ended", node.id, "Interaction flow ended")
+            if session.assigned_agent:
+                session.status = "wrap_up"
+                self._event(
+                    session,
+                    "wrap_up_started",
+                    node.id,
+                    f"After-call work started for {session.assigned_agent}",
+                    {"agent_name": session.assigned_agent},
+                )
+            else:
+                session.status = "completed"
+                self._event(session, "session_completed", node.id, "Session completed")
             return False
 
         raise FlowEngineError(f"Unsupported node type: {node.type}")

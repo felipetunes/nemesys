@@ -9,7 +9,17 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
 
-NodeType = Literal["start", "prompt", "collect_input", "ai_intent", "decision", "set_variable", "queue", "end"]
+NodeType = Literal[
+    "start",
+    "prompt",
+    "collect_input",
+    "ai_intent",
+    "decision",
+    "set_variable",
+    "set_outcome",
+    "queue",
+    "end",
+]
 VariableName = Annotated[str, Field(min_length=1, max_length=120, pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")]
 FlowIdentifier = Annotated[str, Field(min_length=1, max_length=120, pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]*$")]
 WorkspaceRole = Literal["viewer", "editor", "admin", "owner"]
@@ -58,12 +68,26 @@ class SetVariableConfig(StrictModel):
     value: Any
 
 
+class FlowOutcomeConfig(StrictModel):
+    name: str = Field(min_length=1, max_length=120)
+    result: Literal["success", "failure"] = "success"
+
+
 class QueueConfig(StrictModel):
     queue_name: str = Field(min_length=1, max_length=120)
     message: str = Field(min_length=1, max_length=4000)
 
 
-NodeConfig = StartConfig | MessageConfig | CollectInputConfig | AiIntentConfig | DecisionConfig | SetVariableConfig | QueueConfig
+NodeConfig = (
+    StartConfig
+    | MessageConfig
+    | CollectInputConfig
+    | AiIntentConfig
+    | DecisionConfig
+    | SetVariableConfig
+    | FlowOutcomeConfig
+    | QueueConfig
+)
 NODE_CONFIG_MODELS: dict[str, type[StrictModel]] = {
     "start": StartConfig,
     "prompt": MessageConfig,
@@ -71,6 +95,7 @@ NODE_CONFIG_MODELS: dict[str, type[StrictModel]] = {
     "ai_intent": AiIntentConfig,
     "decision": DecisionConfig,
     "set_variable": SetVariableConfig,
+    "set_outcome": FlowOutcomeConfig,
     "queue": QueueConfig,
     "end": MessageConfig,
 }
@@ -160,7 +185,10 @@ class FlowVersionRow(Base):
     published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
-SessionStatus = Literal["running", "waiting_input", "queued", "completed", "failed"]
+SessionStatus = Literal["running", "waiting_input", "queued", "wrap_up", "completed", "failed"]
+WrapUpCode = Literal["resolved", "transferred", "callback_requested", "no_response", "other"]
+AgentPresence = Literal["offline", "available", "away", "busy", "on_queue"]
+AgentRoutingStatus = Literal["off_queue", "idle", "interacting", "not_responding"]
 
 
 class TraceEvent(StrictModel):
@@ -170,6 +198,12 @@ class TraceEvent(StrictModel):
     node_id: str | None = None
     message: str
     data: dict[str, Any] = Field(default_factory=dict)
+
+
+class FlowOutcome(StrictModel):
+    name: str
+    result: Literal["success", "failure"]
+    achieved_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class CallSession(StrictModel):
@@ -187,6 +221,10 @@ class CallSession(StrictModel):
     queue_name: str | None = None
     queued_at: datetime | None = None
     assigned_agent: str | None = None
+    outcomes: list[FlowOutcome] = Field(default_factory=list)
+    wrap_up_code: WrapUpCode | None = None
+    wrap_up_notes: str | None = None
+    wrapped_up_at: datetime | None = None
 
 
 class SessionCreate(StrictModel):
@@ -202,6 +240,37 @@ class SessionInput(StrictModel):
 class QueueClaim(StrictModel):
     agent_name: str = Field(min_length=1, max_length=120)
 
+    @field_validator("agent_name")
+    @classmethod
+    def normalize_agent_name(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Agent name cannot be empty")
+        return normalized
+
+
+class QueueWrapUp(StrictModel):
+    code: WrapUpCode
+    notes: str | None = Field(default=None, max_length=2000)
+
+    @field_validator("notes")
+    @classmethod
+    def normalize_notes(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return value.strip() or None
+
+
+class AgentPresenceUpdate(StrictModel):
+    presence: AgentPresence
+
+
+class AgentState(StrictModel):
+    agent_name: str
+    presence: AgentPresence
+    routing_status: AgentRoutingStatus
+    updated_at: datetime
+
 
 class IntentResult(StrictModel):
     intent: str
@@ -216,6 +285,8 @@ class MetricsSummary(StrictModel):
     status_counts: dict[str, int]
     intent_counts: dict[str, int]
     channel_counts: dict[str, int]
+    outcome_counts: dict[str, int]
+    wrap_up_counts: dict[str, int]
     completion_rate: float = Field(ge=0, le=1)
     average_duration_seconds: float
 
@@ -328,7 +399,19 @@ class SessionRow(Base):
     session_json: Mapped[str] = mapped_column(Text)
     provider: Mapped[str | None] = mapped_column(String(50), nullable=True)
     provider_call_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    assigned_agent: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    wrap_up_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
     revision: Mapped[int] = mapped_column(Integer, default=0)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+
+
+class AgentStateRow(Base):
+    __tablename__ = "agent_states"
+
+    workspace_id: Mapped[str] = mapped_column(String(36), primary_key=True, default="default")
+    agent_name: Mapped[str] = mapped_column(String(120), primary_key=True)
+    presence: Mapped[str] = mapped_column(String(30), default="offline")
+    routing_status: Mapped[str] = mapped_column(String(30), default="off_queue")
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
 

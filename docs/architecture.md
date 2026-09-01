@@ -10,11 +10,9 @@
 
 ## Runtime model
 
-A flow is a directed graph of nodes and edges. Editors change a mutable draft and publish immutable numbered versions. A `CallSession` is pinned to one published version and owns the current node, variables, trace and waiting state. The engine advances until one of three things happens:
+A flow is a directed graph of nodes and edges. Editors change a mutable draft and publish immutable numbered versions. A `CallSession` is pinned to one published version and owns the current node, variables, outcomes, trace and waiting state. The engine advances until execution pauses for input or a queue, reaches agent after-call work, completes, fails or reaches its safety limit.
 
-- the flow ends;
-- a node requires user input;
-- a safety limit is reached.
+Named success/failure outcomes are explicit graph nodes. They remain provider-neutral, are included in the execution trace and can be aggregated without asking an AI model to infer whether the journey succeeded.
 
 The runtime never allows an AI model to pick an arbitrary node ID. The `ai_intent` service returns one of the node's configured intent labels. Graph routing still remains deterministic.
 
@@ -47,7 +45,7 @@ Passwords use salted PBKDF2 derivation. Only token hashes are persisted, tokens 
 
 ### Operations
 
-Terminal sessions have configurable retention. Metrics are computed from persisted sessions and their trace timestamps, including volume, state, intent, channel, completion rate and duration. A queue node pauses the engine in a traceable `queued` state until an explicit agent claim resumes deterministic routing. Sensitive management operations append workspace-scoped audit events; request IDs and structured completion logs make API failures correlatable without logging request bodies.
+Terminal sessions have configurable retention. Metrics are computed from persisted sessions and their trace timestamps, including volume, state, intent, channel, outcomes, wrap-up codes, completion rate and duration. A queue node pauses the engine in a traceable `queued` state until an on-queue agent claims it. Persistent presence and routing status distinguish availability from active interaction work. An agent-assisted session reaches `wrap_up` before completion, where a bounded wrap-up code and optional notes finish after-call work. Sensitive management operations append workspace-scoped audit events; request IDs and structured completion logs make API failures correlatable without logging request bodies.
 
 ## Production evolution
 

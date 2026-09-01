@@ -1,4 +1,8 @@
-export type NodeKind = 'start' | 'prompt' | 'collect_input' | 'ai_intent' | 'decision' | 'set_variable' | 'queue' | 'end'
+export type NodeKind = 'start' | 'prompt' | 'collect_input' | 'ai_intent' | 'decision' | 'set_variable' | 'set_outcome' | 'queue' | 'end'
+
+export type AgentPresence = 'offline' | 'available' | 'away' | 'busy' | 'on_queue'
+export type AgentRoutingStatus = 'off_queue' | 'idle' | 'interacting' | 'not_responding'
+export type WrapUpCode = 'resolved' | 'transferred' | 'callback_requested' | 'no_response' | 'other'
 
 export interface FlowNode {
   id: string
@@ -57,7 +61,7 @@ export interface CallSession {
   flow_id: string
   flow_version: number
   revision: number
-  status: 'running' | 'waiting_input' | 'queued' | 'completed' | 'failed'
+  status: 'running' | 'waiting_input' | 'queued' | 'wrap_up' | 'completed' | 'failed'
   current_node_id?: string | null
   variables: Record<string, unknown>
   trace: TraceEvent[]
@@ -67,6 +71,17 @@ export interface CallSession {
   queue_name?: string | null
   queued_at?: string | null
   assigned_agent?: string | null
+  outcomes: { name: string; result: 'success' | 'failure'; achieved_at: string }[]
+  wrap_up_code?: WrapUpCode | null
+  wrap_up_notes?: string | null
+  wrapped_up_at?: string | null
+}
+
+export interface AgentState {
+  agent_name: string
+  presence: AgentPresence
+  routing_status: AgentRoutingStatus
+  updated_at: string
 }
 
 export interface MetricsSummary {
@@ -75,6 +90,8 @@ export interface MetricsSummary {
   status_counts: Record<string, number>
   intent_counts: Record<string, number>
   channel_counts: Record<string, number>
+  outcome_counts: Record<string, number>
+  wrap_up_counts: Record<string, number>
   completion_rate: number
   average_duration_seconds: number
 }

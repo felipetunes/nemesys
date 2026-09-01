@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from starlette.middleware.base import RequestResponseEndpoint
 
 from app import __version__
+from app.api.agents import router as agents_router
 from app.api.auth import router as auth_router
 from app.api.flows import router as flows_router
 from app.api.operations import router as operations_router
@@ -59,6 +60,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(flows_router)
+app.include_router(agents_router)
 app.include_router(auth_router)
 app.include_router(workspaces_router)
 app.include_router(sessions_router)

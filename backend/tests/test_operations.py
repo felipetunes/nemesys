@@ -4,7 +4,7 @@ from sqlalchemy import update
 
 from app.demo_flow import build_demo_flow
 from app.engine.runtime import FlowEngine
-from app.models import SessionRow
+from app.models import FlowOutcome, SessionRow
 from app.services.flow_repository import FlowRepository
 from app.services.metrics import MetricsService
 from app.services.retention import RetentionService
@@ -47,6 +47,8 @@ def test_metrics_are_derived_from_persisted_sessions(db_factory):
 
         completed = session_repo.create(engine.create_session(flow, {"channel": "voice"}))
         engine.submit_input(flow, completed, "2")
+        completed.outcomes.append(FlowOutcome(name="cancellation_request", result="success"))
+        completed.wrap_up_code = "resolved"
         session_repo.save(completed, expected_revision=completed.revision)
         session_repo.create(engine.create_session(flow))
 
@@ -57,4 +59,6 @@ def test_metrics_are_derived_from_persisted_sessions(db_factory):
     assert summary.status_counts == {"completed": 1, "waiting_input": 1}
     assert summary.intent_counts == {"cancellation": 1}
     assert summary.channel_counts == {"voice": 1, "browser": 1}
+    assert summary.outcome_counts == {"cancellation_request:success": 1}
+    assert summary.wrap_up_counts == {"resolved": 1}
     assert summary.completion_rate == 0.5

@@ -48,6 +48,7 @@ export default function MetricsDashboard() {
     running: 'status.running',
     waiting_input: 'status.waiting_input',
     queued: 'status.queued',
+    wrap_up: 'status.wrap_up',
     completed: 'status.completed',
     failed: 'status.failed',
   }
@@ -55,6 +56,13 @@ export default function MetricsDashboard() {
     browser: 'channel.browser',
     twilio: 'channel.twilio',
     generic: 'channel.generic',
+  }
+  const wrapUpKeys: Record<string, TranslationKey> = {
+    resolved: 'wrapUp.resolved',
+    transferred: 'wrapUp.transferred',
+    callback_requested: 'wrapUp.callback_requested',
+    no_response: 'wrapUp.no_response',
+    other: 'wrapUp.other',
   }
 
   return <div className="metrics-page">
@@ -73,6 +81,8 @@ export default function MetricsDashboard() {
       <Distribution title={t('metrics.sessionStatus')} values={metrics.status_counts} formatLabel={label => statusKeys[label] ? t(statusKeys[label]) : label.replaceAll('_', ' ')} />
       <Distribution title={t('metrics.detectedIntents')} values={metrics.intent_counts} />
       <Distribution title={t('metrics.channels')} values={metrics.channel_counts} formatLabel={label => channelKeys[label] ? t(channelKeys[label]) : label.replaceAll('_', ' ')} />
+      <Distribution title={t('metrics.flowOutcomes')} values={metrics.outcome_counts} formatLabel={label => label.replace(':', ' · ').replaceAll('_', ' ')} />
+      <Distribution title={t('metrics.wrapUpCodes')} values={metrics.wrap_up_counts} formatLabel={label => wrapUpKeys[label] ? t(wrapUpKeys[label]) : label.replaceAll('_', ' ')} />
     </div>
   </div>
 }

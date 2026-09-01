@@ -37,6 +37,8 @@ class SessionRepository:
                 session_json=payload.model_dump_json(),
                 provider=provider,
                 provider_call_id=provider_call_id,
+                assigned_agent=payload.assigned_agent,
+                wrap_up_code=payload.wrap_up_code,
                 revision=0,
                 updated_at=datetime.now(UTC),
             )
@@ -79,6 +81,18 @@ class SessionRepository:
         ).all()
         return [self._to_model(row) for row in rows]
 
+    def list_assigned(self, agent_name: str) -> list[CallSession]:
+        rows = self.db.scalars(
+            select(SessionRow)
+            .where(
+                SessionRow.workspace_id == self.workspace_id,
+                SessionRow.assigned_agent == agent_name,
+                SessionRow.status.in_(("running", "waiting_input", "wrap_up")),
+            )
+            .order_by(SessionRow.updated_at.desc())
+        ).all()
+        return [self._to_model(row) for row in rows]
+
     def save(self, session: CallSession, *, expected_revision: int) -> CallSession:
         next_revision = expected_revision + 1
         payload = session.model_copy(update={"revision": next_revision})
@@ -93,6 +107,8 @@ class SessionRepository:
                 )
                 .values(
                     status=payload.status,
+                    assigned_agent=payload.assigned_agent,
+                    wrap_up_code=payload.wrap_up_code,
                     session_json=payload.model_dump_json(),
                     revision=next_revision,
                     updated_at=datetime.now(UTC),

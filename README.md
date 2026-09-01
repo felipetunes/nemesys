@@ -4,7 +4,7 @@
 [![Release](https://img.shields.io/github/v/release/felipetunes/nemesys)](https://github.com/felipetunes/nemesys/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-7c5cff.svg)](LICENSE)
 
-**Current project version: `0.8.0` — safe IVR lifecycle and visual version history**
+**Current project version: `0.9.0` — flow outcomes and agent operations**
 
 **A visual, AI-assisted IVR flow builder and runtime for learning, prototyping and portfolio demos.**
 
@@ -51,13 +51,16 @@ Traditional IVRs are often built inside proprietary platforms. Nemesys exposes t
 - contextual descriptions for every node type in the palette and flow canvas;
 - IVR duplication, archival, restoration and protected permanent deletion;
 - published-version comparison and rollback to the editable draft.
+- provider-neutral flow outcomes with success/failure tracking and metrics;
+- persistent agent presence and routing status;
+- assigned-interaction handling and traceable after-call work with wrap-up codes.
 
 ## Product areas and languages
 
 Nemesys separates design-time and operational responsibilities while keeping one provider-neutral runtime:
 
 - **Architect** contains the multi-IVR catalog, visual flow editor, browser simulator, version history and runtime architecture view.
-- **Collaborate** contains operational metrics and the live human-agent queue.
+- **Collaborate** contains operational metrics, persistent agent availability, live queues, assigned interactions and after-call work.
 
 The interface starts in Brazilian Portuguese (`pt-BR`). Use the language selector in the top bar to switch to English (`en-US`); the selection is saved locally in the browser.
 
@@ -230,7 +233,11 @@ POST   /api/telephony/twilio/input
 POST   /api/telephony/generic/start
 POST   /api/telephony/generic/{session_id}/input
 GET    /api/queue
+GET    /api/queue/assigned?agent_name={agent_name}
 POST   /api/queue/{session_id}/claim
+POST   /api/queue/{session_id}/wrap-up
+GET    /api/agents
+PUT    /api/agents/{agent_name}/presence
 GET    /api/operations/metrics
 GET    /api/operations/audit
 POST   /api/operations/retention/run

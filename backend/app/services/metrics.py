@@ -18,6 +18,8 @@ class MetricsService:
         status_counts: Counter[str] = Counter()
         intent_counts: Counter[str] = Counter()
         channel_counts: Counter[str] = Counter()
+        outcome_counts: Counter[str] = Counter()
+        wrap_up_counts: Counter[str] = Counter()
         durations: list[float] = []
         recent_cutoff = datetime.now(UTC) - timedelta(hours=24)
         recent = 0
@@ -35,6 +37,10 @@ class MetricsService:
             if intent:
                 intent_counts[str(intent)] += 1
             channel_counts[str(session.variables.get("channel", "browser"))] += 1
+            for outcome in session.outcomes:
+                outcome_counts[f"{outcome.name}:{outcome.result}"] += 1
+            if session.wrap_up_code:
+                wrap_up_counts[session.wrap_up_code] += 1
             if session.status in {"completed", "failed"} and len(session.trace) >= 2:
                 duration = (session.trace[-1].timestamp - session.trace[0].timestamp).total_seconds()
                 durations.append(max(duration, 0))
@@ -47,6 +53,8 @@ class MetricsService:
             status_counts=dict(status_counts),
             intent_counts=dict(intent_counts),
             channel_counts=dict(channel_counts),
+            outcome_counts=dict(outcome_counts),
+            wrap_up_counts=dict(wrap_up_counts),
             completion_rate=(completed / total) if total else 0,
             average_duration_seconds=(sum(durations) / len(durations)) if durations else 0,
         )

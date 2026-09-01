@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.9.0 — 2026-09-01
+
+### Added
+
+- Provider-neutral flow-outcome nodes with success/failure results, execution traces and operational metrics.
+- Persistent agent presence and routing status in the Collaborate workspace.
+- Agent-assigned interaction lists and after-call work with wrap-up codes and optional notes.
+- Workspace-scoped agent-operation APIs and an Alembic migration for indexed assignment state.
+
+### Changed
+
+- Agents must be on queue before claiming an interaction and move to interacting while handling it.
+- Agent-assisted sessions now enter a traceable wrap-up state before becoming completed.
+- Collaborate separates waiting interactions from the active agent's assigned work.
+
 ## 0.8.0 — 2026-09-01
 
 ### Added

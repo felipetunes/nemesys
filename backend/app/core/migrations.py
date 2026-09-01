@@ -22,10 +22,16 @@ def upgrade_database(engine: Engine, database_url: str) -> None:
             user_columns = (
                 {column["name"] for column in inspector.get_columns("users")} if "users" in tables else set()
             )
-            revision = (
-                "20260901_0003"
-                if "audit_events" in tables and "failed_login_attempts" in user_columns
-                else "20260901_0002"
-            )
+            if "audit_events" not in tables or "failed_login_attempts" not in user_columns:
+                revision = "20260901_0002"
+            elif "archived_at" not in flow_columns:
+                revision = "20260901_0003"
+            else:
+                session_columns = {column["name"] for column in inspector.get_columns("sessions")}
+                revision = (
+                    "head"
+                    if "agent_states" in tables and "assigned_agent" in session_columns
+                    else "20260901_0004"
+                )
         command.stamp(config, revision)
     command.upgrade(config, "head")

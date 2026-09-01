@@ -1,6 +1,6 @@
 from app.demo_flow import build_demo_flow
 from app.engine.runtime import FlowEngine
-from app.models import IntentResult
+from app.models import FlowDefinition, IntentResult
 
 
 class FakeClassifier:
@@ -54,7 +54,46 @@ def test_human_agent_route_waits_in_queue_and_resumes():
 
     engine.connect_agent(flow, session, "Browser Agent")
 
-    assert session.status == "completed"
+    assert session.status == "wrap_up"
     assert session.assigned_agent == "Browser Agent"
     assert session.variables["assigned_agent"] == "Browser Agent"
     assert any(event.type == "agent_connected" for event in session.trace)
+    assert any(event.type == "wrap_up_started" for event in session.trace)
+
+    engine.complete_wrap_up(session, "resolved", "Customer received the requested guidance.")
+
+    assert session.status == "completed"
+    assert session.wrap_up_code == "resolved"
+    assert session.wrap_up_notes == "Customer received the requested guidance."
+    assert any(event.type == "wrap_up_completed" for event in session.trace)
+
+
+def test_flow_outcome_is_recorded_and_traceable():
+    flow = FlowDefinition.model_validate(
+        {
+            "id": "outcome-flow",
+            "name": "Outcome flow",
+            "version": 1,
+            "nodes": [
+                {"id": "start", "type": "start", "label": "Start", "config": {}},
+                {
+                    "id": "outcome",
+                    "type": "set_outcome",
+                    "label": "Resolved goal",
+                    "config": {"name": "self_service", "result": "success"},
+                },
+                {"id": "end", "type": "end", "label": "End", "config": {"message": "Done"}},
+            ],
+            "edges": [
+                {"id": "start-outcome", "source": "start", "target": "outcome"},
+                {"id": "outcome-end", "source": "outcome", "target": "end"},
+            ],
+        }
+    )
+
+    session = FlowEngine().create_session(flow)
+
+    assert session.status == "completed"
+    assert [(outcome.name, outcome.result) for outcome in session.outcomes] == [("self_service", "success")]
+    outcome_event = next(event for event in session.trace if event.type == "flow_outcome")
+    assert outcome_event.data == {"name": "self_service", "result": "success"}
