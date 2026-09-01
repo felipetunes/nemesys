@@ -4,7 +4,7 @@
 [![Release](https://img.shields.io/github/v/release/felipetunes/nemesys)](https://github.com/felipetunes/nemesys/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-7c5cff.svg)](LICENSE)
 
-**Current project version: `0.12.0` — focused workflows and scalable navigation**
+**Current project version: `0.13.0` — user-first secure workspace access**
 
 **A visual, AI-assisted IVR flow builder and runtime for learning, prototyping and portfolio demos.**
 
@@ -66,7 +66,11 @@ Traditional IVRs are often built inside proprietary platforms. Nemesys exposes t
 - searchable and sortable IVR catalog for growing workspaces;
 - progressive editor palette that presents essential nodes before advanced logic and data nodes;
 - visible editor keyboard shortcuts for saving and testing;
-- customer-first simulator with execution traces and session variables available on demand.
+- customer-first simulator with execution traces and session variables available on demand;
+- a dedicated login portal that places every workspace behind an authenticated user by default;
+- role-aware navigation and read-only experiences for viewers, with administrative controls reserved for admins and owners;
+- explicit workspace switching, server-backed sign-out and automatic return to login when a session expires;
+- an intentionally separate offline demo entry point when authentication is disabled.
 
 ## Product areas and languages
 
@@ -175,12 +179,16 @@ npm run dev
 
 Open `http://localhost:5173`.
 
+On the first access, choose **Create owner account** to create the initial owner and isolated workspace. Subsequent accounts are created by an admin or owner in **Administration** unless public registration is explicitly enabled.
+
 ### Docker
 
 ```bash
 cp .env.example .env
 docker compose up --build
 ```
+
+Authentication is enabled by default. For a local, provider-free demonstration without accounts, set `AUTH_REQUIRED=false`; the login portal will then show an explicit **Try offline demo** action.
 
 ## Using OpenAI
 
@@ -287,13 +295,13 @@ See [`docs/architecture.md`](docs/architecture.md), [`docs/flow-spec.md`](docs/f
 
 ## Management API protection
 
-Set `AUTH_REQUIRED=true` to require user or admin bearer tokens. The first registered account becomes the owner of a new isolated workspace; later public registration follows `ALLOW_REGISTRATION`. Tokens are revocable and expire according to `AUTH_SESSION_DAYS`. Leave authentication disabled for the fully offline demo.
+`AUTH_REQUIRED=true` is the default and requires user or admin bearer tokens. The first registered account becomes the owner of a new isolated workspace; later public registration follows `ALLOW_REGISTRATION`. Tokens are revocable and expire according to `AUTH_SESSION_DAYS`. Set `AUTH_REQUIRED=false` only when you intentionally want the fully offline demo; the application still opens at the portal and exposes a clearly separated demo action.
 
 Workspace roles are enforced server-side: viewers can inspect, editors can modify flows and operate simulations, and admins/owners can create accounts, manage memberships, permanently delete eligible archived flows, run retention and inspect the audit log. The Administration application is shown only to admins and owners. Memberships can be deactivated without deleting the user; deactivation immediately revokes existing sessions and workspace access. Ownership changes remain owner-only and the last active owner cannot be removed or deactivated. Repeated failed logins are temporarily locked according to `AUTH_MAX_FAILED_ATTEMPTS` and `AUTH_LOCKOUT_MINUTES`.
 
 When authentication is enabled, Collaborate binds agent operations to the signed-in user's email, so one agent cannot claim work or change presence as another. Manual agent names remain available only in offline demo mode.
 
-The editor's **Access** dialog supports registration and login and stores its token only for the current browser tab. `ADMIN_API_KEY` remains available as a bootstrap/operator credential.
+The login portal stores its token only for the current browser tab. After login, the account dialog shows the signed-in identity, active workspace and role, and provides workspace switching plus server-backed sign-out. Expired or revoked sessions return to the portal automatically. `ADMIN_API_KEY` remains available as a bootstrap/operator credential.
 
 ## Production profile
 

@@ -5,6 +5,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 os.environ.setdefault("DATABASE_URL", "sqlite:///./data/test_nemesys.db")
+os.environ.setdefault("AUTH_REQUIRED", "false")
 
 from app.core.db import Base  # noqa: E402
 

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import {
   Activity,
   BarChart3,
@@ -19,8 +19,9 @@ import {
   UsersRound,
   Workflow,
 } from 'lucide-react'
-import { api } from './api'
+import { api, AUTH_EXPIRED_EVENT } from './api'
 import AccessDialog from './components/AccessDialog'
+import AuthPortal from './components/AuthPortal'
 import CollaborateQueue from './components/CollaborateQueue'
 import FlowCatalog from './components/FlowCatalog'
 import HelpCenter, { GettingStarted, type LearningDestination } from './components/LearningGuide'
@@ -35,6 +36,7 @@ import { validationErrorMessage, validationSuccessMessage } from './validation'
 type Application = 'architect' | 'collaborate' | 'admin'
 type ArchitectTab = 'ivrs' | 'editor' | 'simulator' | 'history' | 'architecture'
 type CollaborateTab = 'overview' | 'queue'
+type AccessState = 'checking' | 'locked' | 'authenticated' | 'demo'
 
 const APPLICATION_STORAGE_KEY = 'nemesys_application'
 const SELECTED_FLOW_STORAGE_KEY = 'nemesys_selected_flow'
@@ -68,14 +70,79 @@ export default function App() {
   const [flowError, setFlowError] = useState('')
   const [hasManagementToken, setHasManagementToken] = useState(() => Boolean(window.sessionStorage.getItem('nemesys_management_token')))
   const [currentUser, setCurrentUser] = useState<AuthMe | null>(null)
-  const [accessChecked, setAccessChecked] = useState(false)
+  const [accessState, setAccessState] = useState<AccessState>('checking')
+  const [authRequired, setAuthRequired] = useState(true)
+  const [sessionExpired, setSessionExpired] = useState(false)
   const [accessRevision, setAccessRevision] = useState(0)
   const [showAccess, setShowAccess] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
   const [showGuide, setShowGuide] = useState(() => window.localStorage.getItem(GUIDE_HIDDEN_STORAGE_KEY) !== 'true')
   const [editorDirty, setEditorDirty] = useState(false)
 
+  const resetWorkspaceState = useCallback(() => {
+    setFlows([])
+    setFlow(null)
+    setHistoryFlow(null)
+    setPublishedVersion(null)
+    setFlowLoading(true)
+    setFlowError('')
+    setActionError('')
+    setEditorDirty(false)
+  }, [])
+
+  const refreshAccess = useCallback(async () => {
+    resetWorkspaceState()
+    setAccessState('checking')
+    setSessionExpired(false)
+    try {
+      const user = await api.me()
+      const role = user.workspaces.find(item => item.id === user.active_workspace_id)?.role
+      if (role === 'viewer') {
+        setArchitectTab(current => current === 'simulator' ? 'ivrs' : current)
+        setCollaborateTab(current => current === 'queue' ? 'overview' : current)
+      }
+      setCurrentUser(user)
+      setHasManagementToken(true)
+      setAccessState('authenticated')
+      setAccessRevision(value => value + 1)
+      setShowAccess(false)
+    } catch {
+      window.sessionStorage.removeItem('nemesys_management_token')
+      window.sessionStorage.removeItem('nemesys_workspace_id')
+      setCurrentUser(null)
+      setHasManagementToken(false)
+      setAccessState('locked')
+    }
+  }, [resetWorkspaceState])
+
   useEffect(() => {
+    let active = true
+    api.health()
+      .then(health => {
+        if (!active) return
+        setAuthRequired(health.management_api_protected)
+        if (window.sessionStorage.getItem('nemesys_management_token')) void refreshAccess()
+        else setAccessState('locked')
+      })
+      .catch(() => { if (active) setAccessState('locked') })
+    return () => { active = false }
+  }, [refreshAccess])
+
+  useEffect(() => {
+    const handleExpiredSession = () => {
+      resetWorkspaceState()
+      setCurrentUser(null)
+      setHasManagementToken(false)
+      setSessionExpired(true)
+      setAccessState('locked')
+      setShowAccess(false)
+    }
+    window.addEventListener(AUTH_EXPIRED_EVENT, handleExpiredSession)
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, handleExpiredSession)
+  }, [resetWorkspaceState])
+
+  useEffect(() => {
+    if (accessState !== 'authenticated' && accessState !== 'demo') return
     let active = true
     api.listFlows(true)
       .then(async drafts => {
@@ -101,20 +168,12 @@ export default function App() {
       .catch(error => { if (active) setFlowError(error instanceof Error ? error.message : String(error)) })
       .finally(() => { if (active) setFlowLoading(false) })
     return () => { active = false }
-  }, [accessRevision])
-
-  useEffect(() => {
-    let active = true
-    api.me()
-      .then(user => { if (active) setCurrentUser(user) })
-      .catch(() => { if (active) setCurrentUser(null) })
-      .finally(() => { if (active) setAccessChecked(true) })
-    return () => { active = false }
-  }, [accessRevision])
+  }, [accessRevision, accessState])
 
   const activeRole = currentUser?.workspaces.find(item => item.id === currentUser.active_workspace_id)?.role
+  const canEdit = accessState === 'demo' || activeRole === 'editor' || activeRole === 'admin' || activeRole === 'owner'
   const canAdminister = activeRole === 'admin' || activeRole === 'owner'
-  const visibleApplication = accessChecked && application === 'admin' && !canAdminister ? 'architect' : application
+  const visibleApplication = application === 'admin' && !canAdminister ? 'architect' : application
 
   const setApplication = (nextApplication: Application) => {
     if (nextApplication !== 'architect' && visibleApplication === 'architect' && architectTab === 'editor' && editorDirty && !window.confirm(t('flow.leaveUnsavedConfirm'))) return false
@@ -135,6 +194,7 @@ export default function App() {
   const navigateToLearningDestination = (destination: LearningDestination) => {
     setShowHelp(false)
     setActionError('')
+    if ((destination === 'agent' || destination === 'simulator') && !canEdit) return
     if (destination === 'agent') {
       if (!setApplication('collaborate')) return
       setCollaborateTab('queue')
@@ -358,25 +418,43 @@ export default function App() {
     finally { setImporting(false) }
   }
 
-  const refreshAccess = () => {
-    setHasManagementToken(Boolean(window.sessionStorage.getItem('nemesys_management_token')))
-    setCurrentUser(null)
-    setAccessChecked(false)
-    setFlows([])
-    setFlow(null)
-    setHistoryFlow(null)
-    setFlowLoading(true)
-    setFlowError('')
-    setActionError('')
-    setAccessRevision(value => value + 1)
-    setShowAccess(false)
-  }
-
-  const clearAccess = () => {
+  const enterDemo = () => {
     window.sessionStorage.removeItem('nemesys_management_token')
     window.sessionStorage.removeItem('nemesys_workspace_id')
-    refreshAccess()
+    resetWorkspaceState()
+    setCurrentUser(null)
+    setHasManagementToken(false)
+    setSessionExpired(false)
+    setApplicationState('architect')
+    setArchitectTab('ivrs')
+    setAccessState('demo')
+    setAccessRevision(value => value + 1)
   }
+
+  const clearAccess = async () => {
+    try {
+      if (window.sessionStorage.getItem('nemesys_management_token')) await api.logout()
+    } catch {
+      // Local cleanup still signs the user out when the server session already expired.
+    } finally {
+      window.sessionStorage.removeItem('nemesys_management_token')
+      window.sessionStorage.removeItem('nemesys_workspace_id')
+      resetWorkspaceState()
+      setCurrentUser(null)
+      setHasManagementToken(false)
+      setSessionExpired(false)
+      setAccessState('locked')
+      setShowAccess(false)
+    }
+  }
+
+  const changeWorkspace = (workspaceId: string) => {
+    window.sessionStorage.setItem('nemesys_workspace_id', workspaceId)
+    void refreshAccess()
+  }
+
+  if (accessState === 'checking') return <div className="auth-loading"><LoaderCircle className="spin" /><strong>Nemesys</strong><span>{t('authPortal.checkingSession')}</span></div>
+  if (accessState === 'locked') return <AuthPortal allowDemo={!authRequired} sessionExpired={sessionExpired} onAuthenticated={() => void refreshAccess()} onDemo={enterDemo} />
 
   return (
     <div className="app-shell">
@@ -412,7 +490,7 @@ export default function App() {
               </select>
             </label>
             <button className="help-btn" onClick={() => setShowHelp(true)} title={t('actions.help')}><CircleHelp size={16} />{t('actions.help')}</button>
-            <button className={`access-btn${hasManagementToken ? ' configured' : ''}`} onClick={() => setShowAccess(true)} title={t('actions.configureAccess')}><KeyRound size={16} />{t('actions.access')}</button>
+            <button className={`access-btn${hasManagementToken ? ' configured' : ' demo'}`} onClick={() => setShowAccess(true)} title={t('actions.configureAccess')}><KeyRound size={16} /><span>{currentUser?.email || t('authPortal.demoMode')}</span></button>
           </div>
         </div>
 
@@ -428,14 +506,14 @@ export default function App() {
             <nav className="section-nav" aria-label={t('app.architect')}>
               <button className={architectTab === 'ivrs' ? 'active' : ''} onClick={() => openArchitectTab('ivrs')}><ListTree size={16} />{t('nav.ivrs')}</button>
               <button className={architectTab === 'editor' ? 'active' : ''} onClick={() => openArchitectTab('editor')}><GitBranch size={16} />{t('nav.editor')}</button>
-              <button className={architectTab === 'simulator' ? 'active' : ''} onClick={() => openArchitectTab('simulator')}><PlayCircle size={16} />{t('nav.simulator')}</button>
+              {canEdit && <button className={architectTab === 'simulator' ? 'active' : ''} onClick={() => openArchitectTab('simulator')}><PlayCircle size={16} />{t('nav.simulator')}</button>}
               <button className={architectTab === 'history' ? 'active' : ''} onClick={() => openArchitectTab('history')}><History size={16} />{t('nav.history')}</button>
               <button className={architectTab === 'architecture' ? 'active' : ''} onClick={() => openArchitectTab('architecture')}><Activity size={16} />{t('nav.architecture')}</button>
             </nav>
           ) : visibleApplication === 'collaborate' ? (
             <nav className="section-nav" aria-label={t('app.collaborate')}>
               <button className={collaborateTab === 'overview' ? 'active' : ''} onClick={() => setCollaborateTab('overview')}><BarChart3 size={16} />{t('nav.overview')}</button>
-              <button className={collaborateTab === 'queue' ? 'active' : ''} onClick={() => setCollaborateTab('queue')}><Headphones size={16} />{t('nav.queue')}</button>
+              {canEdit && <button className={collaborateTab === 'queue' ? 'active' : ''} onClick={() => setCollaborateTab('queue')}><Headphones size={16} />{t('nav.queue')}</button>}
             </nav>
           ) : (
             <nav className="section-nav" aria-label={t('app.admin')}>
@@ -449,27 +527,27 @@ export default function App() {
         {notice && <div className="toast"><Save size={15} />{notice}</div>}
         {actionError && <div className="error-box top-error">{actionError}</div>}
 
-        {!flowLoading && visibleApplication === 'architect' && architectTab === 'ivrs' && showGuide && <GettingStarted hasFlow={Boolean(flow)} onNavigate={navigateToLearningDestination} onDismiss={dismissGuide} />}
+        {!flowLoading && visibleApplication === 'architect' && architectTab === 'ivrs' && showGuide && <GettingStarted hasFlow={Boolean(flow)} canEdit={canEdit} onNavigate={navigateToLearningDestination} onDismiss={dismissGuide} />}
 
         {visibleApplication === 'architect' && <>
           {flowError && <div className="error-box top-error">{flowError}</div>}
           {flowLoading && <div className="loading"><LoaderCircle className="spin" />{t('app.loadingFlow')}</div>}
-          {!flowLoading && architectTab === 'ivrs' && <FlowCatalog flows={flows} selectedFlowId={flow?.id ?? null} creating={creatingFlow} busyFlowId={busyFlowId} onCreate={createFlow} onOpen={openFlow} onHistory={openHistory} onDuplicate={duplicateFlow} onArchive={archiveFlow} onRestore={restoreFlow} onDelete={deleteFlow} />}
-          {!flowLoading && architectTab === 'editor' && (flow ? <Suspense fallback={<div className="loading"><LoaderCircle className="spin" />{t('app.loadingEditor')}</div>}><FlowEditor key={`${flow.id}:${flow.updated_at ?? ''}`} flow={flow} onSave={save} onPublish={publish} onExport={exportFlow} onImport={importFlow} onTest={() => setArchitectTab('simulator')} onDirtyChange={setEditorDirty} saving={saving} publishing={publishing} importing={importing} publishedVersion={publishedVersion} /></Suspense> : <FlowSelectionRequired onBack={() => openArchitectTab('ivrs')} />)}
-          {!flowLoading && architectTab === 'simulator' && (flow ? <Simulator flow={flow} /> : <FlowSelectionRequired onBack={() => setArchitectTab('ivrs')} />)}
-          {!flowLoading && architectTab === 'history' && ((historyFlow ?? flow) ? <VersionHistory key={`${(historyFlow ?? flow)!.id}:${(historyFlow ?? flow)!.updated_at ?? ''}`} flow={(historyFlow ?? flow)!} restoring={restoringVersion} onRestore={restoreFlowVersion} /> : <FlowSelectionRequired onBack={() => setArchitectTab('ivrs')} />)}
+          {!flowLoading && architectTab === 'ivrs' && <FlowCatalog canEdit={canEdit} canAdminister={canAdminister} flows={flows} selectedFlowId={flow?.id ?? null} creating={creatingFlow} busyFlowId={busyFlowId} onCreate={createFlow} onOpen={openFlow} onHistory={openHistory} onDuplicate={duplicateFlow} onArchive={archiveFlow} onRestore={restoreFlow} onDelete={deleteFlow} />}
+          {!flowLoading && architectTab === 'editor' && (flow ? <Suspense fallback={<div className="loading"><LoaderCircle className="spin" />{t('app.loadingEditor')}</div>}><FlowEditor key={`${flow.id}:${flow.updated_at ?? ''}`} readOnly={!canEdit} flow={flow} onSave={save} onPublish={publish} onExport={exportFlow} onImport={importFlow} onTest={() => setArchitectTab('simulator')} onDirtyChange={setEditorDirty} saving={saving} publishing={publishing} importing={importing} publishedVersion={publishedVersion} /></Suspense> : <FlowSelectionRequired onBack={() => openArchitectTab('ivrs')} />)}
+          {!flowLoading && architectTab === 'simulator' && (canEdit ? flow ? <Simulator flow={flow} /> : <FlowSelectionRequired onBack={() => setArchitectTab('ivrs')} /> : <AccessRestricted />)}
+          {!flowLoading && architectTab === 'history' && ((historyFlow ?? flow) ? <VersionHistory key={`${(historyFlow ?? flow)!.id}:${(historyFlow ?? flow)!.updated_at ?? ''}`} canRestore={canEdit} flow={(historyFlow ?? flow)!} restoring={restoringVersion} onRestore={restoreFlowVersion} /> : <FlowSelectionRequired onBack={() => setArchitectTab('ivrs')} />)}
           {!flowLoading && architectTab === 'architecture' && <Architecture />}
         </>}
 
         {visibleApplication === 'collaborate' && <>
           {collaborateTab === 'overview' && <MetricsDashboard />}
-          {collaborateTab === 'queue' && <CollaborateQueue />}
+          {collaborateTab === 'queue' && (canEdit ? <CollaborateQueue /> : <AccessRestricted />)}
         </>}
 
         {visibleApplication === 'admin' && <Suspense fallback={<div className="loading"><LoaderCircle className="spin" />{t('users.loading')}</div>}><UserManagement key={accessRevision} /></Suspense>}
       </main>
-      {showAccess && <AccessDialog configured={hasManagementToken} onClose={() => setShowAccess(false)} onAuthenticated={refreshAccess} onClear={clearAccess} />}
-      {showHelp && <HelpCenter canAdminister={canAdminister} hasFlow={Boolean(flow)} onNavigate={navigateToLearningDestination} onClose={() => setShowHelp(false)} />}
+      {showAccess && <AccessDialog configured={hasManagementToken} currentUser={currentUser} onClose={() => setShowAccess(false)} onAuthenticated={() => void refreshAccess()} onClear={clearAccess} onWorkspaceChange={changeWorkspace} />}
+      {showHelp && <HelpCenter canAdminister={canAdminister} canEdit={canEdit} hasFlow={Boolean(flow)} onNavigate={navigateToLearningDestination} onClose={() => setShowHelp(false)} />}
     </div>
   )
 }
@@ -482,6 +560,11 @@ function FlowSelectionRequired({ onBack }: { onBack: () => void }) {
     <p>{t('flow.selectDescription')}</p>
     <button className="primary-btn" onClick={onBack}><ListTree size={16} />{t('flow.backToCatalog')}</button>
   </section>
+}
+
+function AccessRestricted() {
+  const { t } = useI18n()
+  return <section className="selection-required panel"><ShieldCheck size={36} /><h2>{t('permissions.title')}</h2><p>{t('permissions.description')}</p></section>
 }
 
 function Architecture() {

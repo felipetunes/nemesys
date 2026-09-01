@@ -1,6 +1,7 @@
-import type { AgentPresence, AgentState, AuthMe, AuthTokenResponse, CallSession, FlowDefinition, FlowValidationResult, MetricsSummary, WorkspaceMember, WorkspaceRole, WrapUpCode } from './types'
+import type { AgentPresence, AgentState, AuthMe, AuthTokenResponse, CallSession, FlowDefinition, FlowValidationResult, HealthStatus, MetricsSummary, WorkspaceMember, WorkspaceRole, WrapUpCode } from './types'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+export const AUTH_EXPIRED_EVENT = 'nemesys:auth-expired'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const managementToken = window.sessionStorage.getItem('nemesys_management_token')
@@ -24,6 +25,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       // Preserve the original response text when it is not JSON.
     }
     const requestId = response.headers.get('X-Request-ID')
+    if (response.status === 401 && managementToken && path !== '/api/auth/login') {
+      window.sessionStorage.removeItem('nemesys_management_token')
+      window.sessionStorage.removeItem('nemesys_workspace_id')
+      window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT))
+    }
     throw new Error(requestId ? `${message} (request ${requestId})` : message)
   }
   if (response.status === 204) return undefined as T
@@ -31,6 +37,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  health: () => request<HealthStatus>('/health'),
   listFlows: (includeArchived = false) => request<FlowDefinition[]>(`/api/flows?include_archived=${includeArchived}`),
   getFlow: (id: string) => request<FlowDefinition>(`/api/flows/${id}`),
   getFlowVersions: (id: string) => request<FlowDefinition[]>(`/api/flows/${id}/versions`),
@@ -60,4 +67,5 @@ export const api = {
   removeWorkspaceMember: (userId: string) => request<void>(`/api/workspaces/members/${userId}`, { method: 'DELETE' }),
   login: (email: string, password: string) => request<AuthTokenResponse>('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
   register: (email: string, password: string, workspaceName: string) => request<AuthTokenResponse>('/api/auth/register', { method: 'POST', body: JSON.stringify({ email, password, workspace_name: workspaceName }) }),
+  logout: () => request<void>('/api/auth/logout', { method: 'POST' }),
 }

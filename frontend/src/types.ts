@@ -126,3 +126,9 @@ export interface AuthTokenResponse {
   email: string
   workspaces: WorkspaceInfo[]
 }
+
+export interface HealthStatus {
+  status: string
+  version: string
+  management_api_protected: boolean
+}

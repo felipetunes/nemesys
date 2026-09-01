@@ -6,12 +6,13 @@ import { useI18n } from '../i18n'
 import type { FlowDefinition } from '../types'
 
 interface Props {
+  canRestore: boolean
   flow: FlowDefinition
   restoring: boolean
   onRestore: (version: number) => Promise<void>
 }
 
-export default function VersionHistory({ flow, restoring, onRestore }: Props) {
+export default function VersionHistory({ canRestore, flow, restoring, onRestore }: Props) {
   const { language, t } = useI18n()
   const [versions, setVersions] = useState<FlowDefinition[]>([])
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null)
@@ -51,7 +52,7 @@ export default function VersionHistory({ flow, restoring, onRestore }: Props) {
   return <div className="history-page">
     <div className="history-heading">
       <div><span className="eyebrow">ARCHITECT</span><h1>{t('history.title')}</h1><p>{t('history.description', { name: flow.name })}</p></div>
-      {selected && <button className="primary-btn large" disabled={restoring || Boolean(flow.archived_at)} onClick={restore}>
+      {selected && canRestore && <button className="primary-btn large" disabled={restoring || Boolean(flow.archived_at)} onClick={restore}>
         {restoring ? <LoaderCircle className="spin" size={17} /> : <RotateCcw size={17} />}
         {restoring ? t('history.restoring') : t('history.restore')}
       </button>}
@@ -91,7 +92,7 @@ export default function VersionHistory({ flow, restoring, onRestore }: Props) {
           <div><span>{t('history.publishedAt')}</span><strong>{formatDate(selected.published_at)}</strong></div>
           <div><span>{t('history.structure')}</span><strong>{t('history.structureCount', { nodes: selected.nodes.length, edges: selected.edges.length })}</strong></div>
         </div>
-        <p className="restore-hint">{t('history.restoreHint')}</p>
+        <p className="restore-hint">{t(canRestore ? 'history.restoreHint' : 'history.readOnlyHint')}</p>
       </section>}
     </div>}
   </div>

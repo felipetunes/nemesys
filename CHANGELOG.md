@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.13.0 — 2026-09-01
+
+### Added
+
+- Dedicated bilingual login and owner-registration portal before workspace access.
+- Signed-in account view with active workspace switching, role explanation and server-backed sign-out.
+- Automatic session-expiration handling that clears browser credentials and returns to login.
+- Explicit offline demo entry point when authentication is intentionally disabled.
+
+### Changed
+
+- Docker and example environment configuration now require authentication by default.
+- Navigation and actions adapt to the signed-in role; viewers receive read-only flow access while administrative capabilities remain restricted to admins and owners.
+- Catalog, editor, version history, help and onboarding controls now communicate and enforce the user's available actions.
+
 ## 0.12.0 — 2026-09-01
 
 ### Added

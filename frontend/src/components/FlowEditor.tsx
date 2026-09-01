@@ -11,12 +11,13 @@ import {
   type Edge,
   type Node,
 } from '@xyflow/react'
-import { Bot, ChevronDown, CircleStop, Download, FileUp, Flag, GitBranch, Headphones, MessageSquareText, MousePointerClick, Play, PlayCircle, Plus, Save, Sparkles, Trash2, UploadCloud, Variable } from 'lucide-react'
+import { Bot, ChevronDown, CircleStop, Download, FileUp, Flag, GitBranch, Headphones, MessageSquareText, MousePointerClick, Play, PlayCircle, Plus, Save, ShieldCheck, Sparkles, Trash2, UploadCloud, Variable } from 'lucide-react'
 import { useI18n, type TranslationKey } from '../i18n'
 import IvrNode from './IvrNode'
 import type { FlowDefinition, FlowNode, NodeKind } from '../types'
 
 interface Props {
+  readOnly: boolean
   flow: FlowDefinition
   onSave: (flow: FlowDefinition) => Promise<boolean>
   onPublish: (flow: FlowDefinition) => Promise<boolean>
@@ -72,7 +73,7 @@ function toRfNode(n: FlowNode): Node {
   return { id: n.id, type: 'ivr', position: { x: n.x, y: n.y }, data: { label: n.label, kind: n.type, config: n.config } }
 }
 
-export default function FlowEditor({ flow, onSave, onPublish, onExport, onImport, onTest, onDirtyChange, saving, publishing, importing, publishedVersion }: Props) {
+export default function FlowEditor({ readOnly, flow, onSave, onPublish, onExport, onImport, onTest, onDirtyChange, saving, publishing, importing, publishedVersion }: Props) {
   const { t } = useI18n()
   const [nodes, setNodes, onNodesChange] = useNodesState(flow.nodes.map(toRfNode))
   const [edges, setEdges, onEdgesChange] = useEdgesState(
@@ -99,10 +100,11 @@ export default function FlowEditor({ flow, onSave, onPublish, onExport, onImport
   }, [dirty])
 
   const onConnect = useCallback((connection: Connection) => {
+    if (readOnly) return
     setDirty(true)
     onDirtyChange(true)
     setEdges(eds => addEdge({ ...connection, id: `e-${crypto.randomUUID()}` }, eds))
-  }, [onDirtyChange, setEdges])
+  }, [onDirtyChange, readOnly, setEdges])
 
   const handleNodesChange = useCallback((changes: Parameters<typeof onNodesChange>[0]) => {
     if (changes.some(change => ['position', 'remove', 'add', 'replace'].includes(change.type))) {
@@ -230,6 +232,7 @@ export default function FlowEditor({ flow, onSave, onPublish, onExport, onImport
   }
 
   const handleEditorKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (readOnly) return
     const modifier = event.ctrlKey || event.metaKey
     if (modifier && event.key.toLowerCase() === 's') {
       event.preventDefault()
@@ -258,14 +261,16 @@ export default function FlowEditor({ flow, onSave, onPublish, onExport, onImport
     <div className="editor-layout" onKeyDown={handleEditorKeyDown}>
       <aside className="palette panel">
         <div className="section-title"><Plus size={15} /> {t('flow.nodes')}</div>
-        <p className="palette-instruction">{t('flow.paletteInstruction')}</p>
-        <div className="palette-group"><span>{t('flow.groupEssential')}</span>{essentialNodeTypes.map(renderPaletteButton)}</div>
-        <div className={`palette-advanced${showAdvanced ? ' open' : ''}`}>
-          <button className="palette-advanced-toggle" aria-expanded={showAdvanced} onClick={() => setShowAdvanced(current => !current)}><Sparkles size={14} /><span><strong>{t('flow.groupAdvanced')}</strong><small>{t('flow.groupAdvancedDescription')}</small></span><ChevronDown size={14} /></button>
-          {showAdvanced && <div className="palette-group">{advancedNodeTypes.map(renderPaletteButton)}</div>}
-        </div>
-        <div className="palette-note"><Play size={14} /> {t('flow.paletteNote')}</div>
-        <div className="editor-shortcuts"><span>{t('flow.shortcuts')}</span><div><kbd>Ctrl</kbd><kbd>S</kbd>{t('flow.shortcutSave')}</div><div><kbd>Ctrl</kbd><kbd>Enter</kbd>{t('flow.shortcutTest')}</div></div>
+        {readOnly ? <div className="editor-readonly-note"><ShieldCheck size={22} /><strong>{t('flow.readOnlyTitle')}</strong><span>{t('flow.readOnlyDescription')}</span></div> : <>
+          <p className="palette-instruction">{t('flow.paletteInstruction')}</p>
+          <div className="palette-group"><span>{t('flow.groupEssential')}</span>{essentialNodeTypes.map(renderPaletteButton)}</div>
+          <div className={`palette-advanced${showAdvanced ? ' open' : ''}`}>
+            <button className="palette-advanced-toggle" aria-expanded={showAdvanced} onClick={() => setShowAdvanced(current => !current)}><Sparkles size={14} /><span><strong>{t('flow.groupAdvanced')}</strong><small>{t('flow.groupAdvancedDescription')}</small></span><ChevronDown size={14} /></button>
+            {showAdvanced && <div className="palette-group">{advancedNodeTypes.map(renderPaletteButton)}</div>}
+          </div>
+          <div className="palette-note"><Play size={14} /> {t('flow.paletteNote')}</div>
+          <div className="editor-shortcuts"><span>{t('flow.shortcuts')}</span><div><kbd>Ctrl</kbd><kbd>S</kbd>{t('flow.shortcutSave')}</div><div><kbd>Ctrl</kbd><kbd>Enter</kbd>{t('flow.shortcutTest')}</div></div>
+        </>}
       </aside>
 
       <section className="canvas panel">
@@ -283,11 +288,11 @@ export default function FlowEditor({ flow, onSave, onPublish, onExport, onImport
                 event.target.value = ''
               }}
             />
-            <button className="secondary-btn toolbar-file-action" title={t('flow.import')} disabled={saving || publishing || importing} onClick={() => importInput.current?.click()}><FileUp size={16} /><span className="button-label">{t('flow.importShort')}</span></button>
+            {!readOnly && <button className="secondary-btn toolbar-file-action" title={t('flow.import')} disabled={saving || publishing || importing} onClick={() => importInput.current?.click()}><FileUp size={16} /><span className="button-label">{t('flow.importShort')}</span></button>}
             <button className="secondary-btn toolbar-file-action" title={t('flow.export')} disabled={saving || publishing || importing} onClick={() => onExport(buildFlow())}><Download size={16} /><span className="button-label">{t('flow.exportShort')}</span></button>
-            <button className="secondary-btn" title={t('flow.shortcutSaveTitle')} disabled={saving || publishing || importing} onClick={() => void saveDraft()}><Save size={16} />{saving ? t('flow.saving') : t('flow.saveDraft')}</button>
-            <button className="secondary-btn guided-action" title={t('flow.shortcutTestTitle')} disabled={saving || publishing || importing} onClick={() => void saveAndTest()}><PlayCircle size={16} />{t('flow.saveAndTest')}</button>
-            <button className="primary-btn" disabled={saving || publishing || importing} onClick={() => void publishFlow()}><UploadCloud size={16} />{publishing ? t('flow.publishing') : t('flow.publish')}</button>
+            {!readOnly && <button className="secondary-btn" title={t('flow.shortcutSaveTitle')} disabled={saving || publishing || importing} onClick={() => void saveDraft()}><Save size={16} />{saving ? t('flow.saving') : t('flow.saveDraft')}</button>}
+            {!readOnly && <button className="secondary-btn guided-action" title={t('flow.shortcutTestTitle')} disabled={saving || publishing || importing} onClick={() => void saveAndTest()}><PlayCircle size={16} />{t('flow.saveAndTest')}</button>}
+            {!readOnly && <button className="primary-btn" disabled={saving || publishing || importing} onClick={() => void publishFlow()}><UploadCloud size={16} />{publishing ? t('flow.publishing') : t('flow.publish')}</button>}
           </div>
         </div>
         <div className="flow-area">
@@ -303,6 +308,9 @@ export default function FlowEditor({ flow, onSave, onPublish, onExport, onImport
             onNodeClick={(_, node) => { setSelectedId(node.id); setSelectedEdgeId(null) }}
             onEdgeClick={(_, edge) => { setSelectedEdgeId(edge.id); setSelectedId(null) }}
             onPaneClick={() => { setSelectedId(null); setSelectedEdgeId(null) }}
+            nodesDraggable={!readOnly}
+            nodesConnectable={!readOnly}
+            deleteKeyCode={null}
             nodeTypes={nodeTypes}
             fitView
           >
@@ -316,10 +324,11 @@ export default function FlowEditor({ flow, onSave, onPublish, onExport, onImport
       <aside className="properties panel">
         <div className="section-title">{t('flow.properties')}</div>
         {!selected && !selectedEdge && <div className="properties-guide"><MousePointerClick size={23} /><strong>{t('flow.selectHintTitle')}</strong><span>{t('flow.selectHint')}</span><ol><li>{t('flow.guideAdd')}</li><li>{t('flow.guideConnect')}</li><li>{t('flow.guideConfigure')}</li></ol></div>}
+        <fieldset className="properties-fields" disabled={readOnly}>
         {selectedEdge && <>
           <label>{t('flow.routeCondition')}<input value={String((selectedEdge.data?.condition as string | null | undefined) || selectedEdge.label || '')} onChange={e => updateSelectedEdge(e.target.value)} placeholder={t('flow.routePlaceholder')} /></label>
           <div className="field-hint">{t('flow.routeHint')}</div>
-          <button className="danger-btn" onClick={deleteSelection}><Trash2 size={15} />{t('flow.deleteEdge')}</button>
+          {!readOnly && <button className="danger-btn" onClick={deleteSelection}><Trash2 size={15} />{t('flow.deleteEdge')}</button>}
         </>}
         {selected && <>
           {kind && <div className="selected-kind-help"><strong>{t(nodeLabelKeys[kind])}</strong><span>{t(nodeDescriptionKeys[kind])}</span></div>}
@@ -350,8 +359,9 @@ export default function FlowEditor({ flow, onSave, onPublish, onExport, onImport
           </>}
           {kind === 'end' && <label>{t('flow.finalMessage')}<textarea value={String(config.message || '')} onChange={e => updateSelected('config', { ...config, message: e.target.value })} /></label>}
           <div className="field-hint">{t('flow.edgeHint')}</div>
-          {kind !== 'start' && <button className="danger-btn" onClick={deleteSelection}><Trash2 size={15} />{t('flow.deleteNode')}</button>}
+          {!readOnly && kind !== 'start' && <button className="danger-btn" onClick={deleteSelection}><Trash2 size={15} />{t('flow.deleteNode')}</button>}
         </>}
+        </fieldset>
       </aside>
     </div>
   )

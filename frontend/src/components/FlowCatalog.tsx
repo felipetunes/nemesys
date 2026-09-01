@@ -4,6 +4,8 @@ import { useI18n } from '../i18n'
 import type { FlowDefinition } from '../types'
 
 interface Props {
+  canEdit: boolean
+  canAdminister: boolean
   flows: FlowDefinition[]
   selectedFlowId: string | null
   creating: boolean
@@ -18,6 +20,8 @@ interface Props {
 }
 
 export default function FlowCatalog({
+  canEdit,
+  canAdminister,
   flows,
   selectedFlowId,
   creating,
@@ -79,7 +83,7 @@ export default function FlowCatalog({
   return <div className="catalog-page">
     <div className="catalog-heading">
       <div><span className="eyebrow">ARCHITECT</span><h1>{t('catalog.title')}</h1><p>{t('catalog.description')}</p></div>
-      <button className="primary-btn large" onClick={() => { setView('active'); setShowCreate(true) }}><Plus size={17} />{t('catalog.newIvr')}</button>
+      {canEdit && <button className="primary-btn large" onClick={() => { setView('active'); setShowCreate(true) }}><Plus size={17} />{t('catalog.newIvr')}</button>}
     </div>
 
     <div className="catalog-toolbar">
@@ -104,7 +108,7 @@ export default function FlowCatalog({
       </div>
     </div>
 
-    {showCreate && <section className="create-flow panel">
+    {showCreate && canEdit && <section className="create-flow panel">
       <button className="dialog-close" aria-label={t('access.close')} onClick={() => setShowCreate(false)}><X size={17} /></button>
       <div className="create-flow-icon"><Workflow size={22} /></div>
       <h2>{t('catalog.createTitle')}</h2>
@@ -125,7 +129,7 @@ export default function FlowCatalog({
       <p>{query ? t('catalog.noResultsDescription', { query }) : view === 'active' ? t('catalog.emptyDescription') : t('catalog.noArchivedDescription')}</p>
       {query
         ? <button className="secondary-btn" onClick={() => setQuery('')}><X size={16} />{t('catalog.clearSearch')}</button>
-        : view === 'active' && <button className="primary-btn" onClick={() => setShowCreate(true)}><Plus size={16} />{t('catalog.newIvr')}</button>}
+        : view === 'active' && canEdit && <button className="primary-btn" onClick={() => setShowCreate(true)}><Plus size={16} />{t('catalog.newIvr')}</button>}
     </section>}
 
     <div className="flow-cards">
@@ -146,13 +150,13 @@ export default function FlowCatalog({
           <div className="flow-card-actions">
             <button className="secondary-btn" disabled={busy} onClick={() => onHistory(flow)} title={t('catalog.history')}><History size={15} />{t('catalog.history')}</button>
             {!isArchived && <>
-              <button className="secondary-btn" disabled={busy} onClick={() => onDuplicate(flow)} title={t('catalog.duplicate')}><Copy size={15} />{t('catalog.duplicate')}</button>
-              <button className="secondary-btn" disabled={busy} onClick={() => archive(flow)} title={t('catalog.archive')}><Archive size={15} />{t('catalog.archive')}</button>
-              <button className={flow.id === selectedFlowId ? 'secondary-btn' : 'primary-btn'} disabled={busy} onClick={() => onOpen(flow)}>{t('catalog.open')}<ArrowRight size={16} /></button>
+              {canEdit && <button className="secondary-btn" disabled={busy} onClick={() => onDuplicate(flow)} title={t('catalog.duplicate')}><Copy size={15} />{t('catalog.duplicate')}</button>}
+              {canEdit && <button className="secondary-btn" disabled={busy} onClick={() => archive(flow)} title={t('catalog.archive')}><Archive size={15} />{t('catalog.archive')}</button>}
+              <button className={flow.id === selectedFlowId ? 'secondary-btn' : 'primary-btn'} disabled={busy} onClick={() => onOpen(flow)}>{t(canEdit ? 'catalog.open' : 'catalog.view')}<ArrowRight size={16} /></button>
             </>}
             {isArchived && <>
-              <button className="primary-btn" disabled={busy} onClick={() => onRestore(flow)}><RotateCcw size={15} />{t('catalog.restore')}</button>
-              <button className="icon-btn destructive" disabled={busy} onClick={() => deleteFlow(flow)} title={t('catalog.delete')} aria-label={t('catalog.delete')}><Trash2 size={15} /></button>
+              {canEdit && <button className="primary-btn" disabled={busy} onClick={() => onRestore(flow)}><RotateCcw size={15} />{t('catalog.restore')}</button>}
+              {canAdminister && <button className="icon-btn destructive" disabled={busy} onClick={() => deleteFlow(flow)} title={t('catalog.delete')} aria-label={t('catalog.delete')}><Trash2 size={15} /></button>}
             </>}
           </div>
         </article>

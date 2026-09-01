@@ -6,25 +6,27 @@ export type LearningDestination = 'catalog' | 'editor' | 'simulator' | 'agent' |
 
 interface GuideProps {
   hasFlow: boolean
+  canEdit: boolean
   onNavigate: (destination: LearningDestination) => void
   onDismiss: () => void
 }
 
 interface HelpProps {
   canAdminister: boolean
+  canEdit: boolean
   hasFlow: boolean
   onNavigate: (destination: LearningDestination) => void
   onClose: () => void
 }
 
-const steps: { destination: LearningDestination; icon: typeof ListTree; title: TranslationKey; description: TranslationKey; requiresFlow?: boolean }[] = [
+const steps: { destination: LearningDestination; icon: typeof ListTree; title: TranslationKey; description: TranslationKey; requiresFlow?: boolean; requiresEdit?: boolean }[] = [
   { destination: 'catalog', icon: ListTree, title: 'learning.stepCatalog', description: 'learning.stepCatalogDescription' },
   { destination: 'editor', icon: GitBranch, title: 'learning.stepEditor', description: 'learning.stepEditorDescription', requiresFlow: true },
-  { destination: 'simulator', icon: PlayCircle, title: 'learning.stepSimulator', description: 'learning.stepSimulatorDescription', requiresFlow: true },
-  { destination: 'agent', icon: Headphones, title: 'learning.stepAgent', description: 'learning.stepAgentDescription' },
+  { destination: 'simulator', icon: PlayCircle, title: 'learning.stepSimulator', description: 'learning.stepSimulatorDescription', requiresFlow: true, requiresEdit: true },
+  { destination: 'agent', icon: Headphones, title: 'learning.stepAgent', description: 'learning.stepAgentDescription', requiresEdit: true },
 ]
 
-export function GettingStarted({ hasFlow, onNavigate, onDismiss }: GuideProps) {
+export function GettingStarted({ hasFlow, canEdit, onNavigate, onDismiss }: GuideProps) {
   const { t } = useI18n()
 
   return <section className="getting-started panel" aria-labelledby="getting-started-title">
@@ -36,7 +38,7 @@ export function GettingStarted({ hasFlow, onNavigate, onDismiss }: GuideProps) {
     <div className="learning-steps">
       {steps.map((step, index) => {
         const Icon = step.icon
-        const disabled = Boolean(step.requiresFlow && !hasFlow)
+        const disabled = Boolean((step.requiresFlow && !hasFlow) || (step.requiresEdit && !canEdit))
         return <button key={step.destination} disabled={disabled} onClick={() => onNavigate(step.destination)}>
           <span className="learning-step-number">{index + 1}</span>
           <Icon size={18} />
@@ -48,7 +50,7 @@ export function GettingStarted({ hasFlow, onNavigate, onDismiss }: GuideProps) {
   </section>
 }
 
-export default function HelpCenter({ canAdminister, hasFlow, onNavigate, onClose }: HelpProps) {
+export default function HelpCenter({ canAdminister, canEdit, hasFlow, onNavigate, onClose }: HelpProps) {
   const { t } = useI18n()
 
   useEffect(() => {
@@ -74,8 +76,8 @@ export default function HelpCenter({ canAdminister, hasFlow, onNavigate, onClose
 
       <div className="help-actions">
         <button onClick={() => onNavigate('catalog')}><ListTree size={18} /><span><strong>{t('help.manageIvrs')}</strong><small>{t('help.manageIvrsDescription')}</small></span><ArrowRight size={15} /></button>
-        <button disabled={!hasFlow} onClick={() => onNavigate('editor')}><GitBranch size={18} /><span><strong>{t('help.editFlow')}</strong><small>{hasFlow ? t('help.editFlowDescription') : t('learning.createFirst')}</small></span><ArrowRight size={15} /></button>
-        <button onClick={() => onNavigate('agent')}><Headphones size={18} /><span><strong>{t('help.serveCustomers')}</strong><small>{t('help.serveCustomersDescription')}</small></span><ArrowRight size={15} /></button>
+        <button disabled={!hasFlow} onClick={() => onNavigate('editor')}><GitBranch size={18} /><span><strong>{t('help.editFlow')}</strong><small>{hasFlow ? t(canEdit ? 'help.editFlowDescription' : 'help.viewFlowDescription') : t('learning.createFirst')}</small></span><ArrowRight size={15} /></button>
+        <button disabled={!canEdit} onClick={() => onNavigate('agent')}><Headphones size={18} /><span><strong>{t('help.serveCustomers')}</strong><small>{t(canEdit ? 'help.serveCustomersDescription' : 'permissions.roleRequired')}</small></span><ArrowRight size={15} /></button>
         {canAdminister && <button onClick={() => onNavigate('users')}><ShieldCheck size={18} /><span><strong>{t('help.manageUsers')}</strong><small>{t('help.manageUsersDescription')}</small></span><ArrowRight size={15} /></button>}
       </div>
 
