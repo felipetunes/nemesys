@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState, type DragEvent as ReactDragEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent as ReactDragEvent } from 'react'
 import {
   addEdge,
   Background,
@@ -11,17 +11,19 @@ import {
   type Edge,
   type Node,
 } from '@xyflow/react'
-import { Bot, CircleStop, Download, FileUp, Flag, GitBranch, Headphones, MessageSquareText, MousePointerClick, Play, Plus, Save, Trash2, UploadCloud, Variable } from 'lucide-react'
+import { Bot, CircleStop, Download, FileUp, Flag, GitBranch, Headphones, MessageSquareText, MousePointerClick, Play, PlayCircle, Plus, Save, Trash2, UploadCloud, Variable } from 'lucide-react'
 import { useI18n, type TranslationKey } from '../i18n'
 import IvrNode from './IvrNode'
 import type { FlowDefinition, FlowNode, NodeKind } from '../types'
 
 interface Props {
   flow: FlowDefinition
-  onSave: (flow: FlowDefinition) => Promise<void>
-  onPublish: (flow: FlowDefinition) => Promise<void>
+  onSave: (flow: FlowDefinition) => Promise<boolean>
+  onPublish: (flow: FlowDefinition) => Promise<boolean>
   onExport: (flow: FlowDefinition) => void
   onImport: (file: File) => Promise<void>
+  onTest: () => void
+  onDirtyChange: (dirty: boolean) => void
   saving: boolean
   publishing: boolean
   importing: boolean
@@ -37,6 +39,12 @@ const palette: { type: NodeKind; icon: typeof Play }[] = [
   { type: 'set_outcome', icon: Flag },
   { type: 'queue', icon: Headphones },
   { type: 'end', icon: CircleStop },
+]
+
+const paletteGroups: { label: TranslationKey; types: NodeKind[] }[] = [
+  { label: 'flow.groupConversation', types: ['prompt', 'collect_input', 'ai_intent'] },
+  { label: 'flow.groupLogic', types: ['decision', 'set_variable'] },
+  { label: 'flow.groupResolution', types: ['set_outcome', 'queue', 'end'] },
 ]
 
 const nodeLabelKeys: Record<NodeKind, TranslationKey> = {
@@ -67,7 +75,7 @@ function toRfNode(n: FlowNode): Node {
   return { id: n.id, type: 'ivr', position: { x: n.x, y: n.y }, data: { label: n.label, kind: n.type, config: n.config } }
 }
 
-export default function FlowEditor({ flow, onSave, onPublish, onExport, onImport, saving, publishing, importing, publishedVersion }: Props) {
+export default function FlowEditor({ flow, onSave, onPublish, onExport, onImport, onTest, onDirtyChange, saving, publishing, importing, publishedVersion }: Props) {
   const { t } = useI18n()
   const [nodes, setNodes, onNodesChange] = useNodesState(flow.nodes.map(toRfNode))
   const [edges, setEdges, onEdgesChange] = useEdgesState(
@@ -75,15 +83,44 @@ export default function FlowEditor({ flow, onSave, onPublish, onExport, onImport
   )
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
+  const [dirty, setDirty] = useState(false)
   const importInput = useRef<HTMLInputElement>(null)
   const [toFlowPosition, setToFlowPosition] = useState<((position: { x: number; y: number }) => { x: number; y: number }) | null>(null)
   const nodeTypes = useMemo(() => ({ ivr: IvrNode }), [])
   const selected = nodes.find(n => n.id === selectedId)
   const selectedEdge = edges.find(e => e.id === selectedEdgeId)
 
+  useEffect(() => {
+    const protectDraft = (event: BeforeUnloadEvent) => {
+      if (!dirty) return
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', protectDraft)
+    return () => window.removeEventListener('beforeunload', protectDraft)
+  }, [dirty])
+
   const onConnect = useCallback((connection: Connection) => {
+    setDirty(true)
+    onDirtyChange(true)
     setEdges(eds => addEdge({ ...connection, id: `e-${crypto.randomUUID()}` }, eds))
-  }, [setEdges])
+  }, [onDirtyChange, setEdges])
+
+  const handleNodesChange = useCallback((changes: Parameters<typeof onNodesChange>[0]) => {
+    if (changes.some(change => ['position', 'remove', 'add', 'replace'].includes(change.type))) {
+      setDirty(true)
+      onDirtyChange(true)
+    }
+    onNodesChange(changes)
+  }, [onDirtyChange, onNodesChange])
+
+  const handleEdgesChange = useCallback((changes: Parameters<typeof onEdgesChange>[0]) => {
+    if (changes.some(change => ['remove', 'add', 'replace'].includes(change.type))) {
+      setDirty(true)
+      onDirtyChange(true)
+    }
+    onEdgesChange(changes)
+  }, [onDirtyChange, onEdgesChange])
 
   const addNode = (kind: NodeKind, position?: { x: number; y: number }) => {
     const id = `${kind}-${crypto.randomUUID().slice(0, 8)}`
@@ -105,6 +142,8 @@ export default function FlowEditor({ flow, onSave, onPublish, onExport, onImport
       data: { label: t(nodeLabelKeys[kind]), kind, config: defaults[kind] },
     }
     setNodes(items => [...items, node])
+    setDirty(true)
+    onDirtyChange(true)
     setSelectedId(id)
     setSelectedEdgeId(null)
   }
@@ -118,24 +157,33 @@ export default function FlowEditor({ flow, onSave, onPublish, onExport, onImport
 
   const updateSelected = (field: 'label' | 'config', value: unknown) => {
     if (!selectedId) return
+    setDirty(true)
+    onDirtyChange(true)
     setNodes(items => items.map(n => n.id === selectedId ? { ...n, data: { ...n.data, [field]: value } } : n))
   }
 
   const updateSelectedEdge = (condition: string) => {
     if (!selectedEdgeId) return
+    setDirty(true)
+    onDirtyChange(true)
     setEdges(items => items.map(e => e.id === selectedEdgeId ? { ...e, label: condition || undefined, data: { ...(e.data || {}), condition: condition || null } } : e))
   }
 
   const deleteSelection = () => {
+    if (!window.confirm(t('flow.deleteSelectionConfirm'))) return
     if (selectedId) {
       const node = nodes.find(n => n.id === selectedId)
       if (node?.data.kind === 'start') return
       setNodes(items => items.filter(n => n.id !== selectedId))
       setEdges(items => items.filter(e => e.source !== selectedId && e.target !== selectedId))
       setSelectedId(null)
+      setDirty(true)
+      onDirtyChange(true)
     } else if (selectedEdgeId) {
       setEdges(items => items.filter(e => e.id !== selectedEdgeId))
       setSelectedEdgeId(null)
+      setDirty(true)
+      onDirtyChange(true)
     }
   }
 
@@ -161,20 +209,47 @@ export default function FlowEditor({ flow, onSave, onPublish, onExport, onImport
   const config = (selected?.data.config || {}) as Record<string, unknown>
   const kind = selected?.data.kind as NodeKind | undefined
 
+  const saveDraft = async () => {
+    if (await onSave(buildFlow())) {
+      setDirty(false)
+      onDirtyChange(false)
+    }
+  }
+
+  const publishFlow = async () => {
+    if (await onPublish(buildFlow())) {
+      setDirty(false)
+      onDirtyChange(false)
+    }
+  }
+
+  const saveAndTest = async () => {
+    if (await onSave(buildFlow())) {
+      setDirty(false)
+      onDirtyChange(false)
+      onTest()
+    }
+  }
+
   return (
     <div className="editor-layout">
       <aside className="palette panel">
         <div className="section-title"><Plus size={15} /> {t('flow.nodes')}</div>
-        {palette.map(item => {
-          const Icon = item.icon
-          return <button key={item.type} className="palette-btn" title={t(nodeDescriptionKeys[item.type])} draggable onDragStart={event => { event.dataTransfer.setData('application/nemesys-node-kind', item.type); event.dataTransfer.effectAllowed = 'copy' }} onClick={() => addNode(item.type)}><Icon size={16} /><span>{t(nodeLabelKeys[item.type])}</span></button>
-        })}
+        <p className="palette-instruction">{t('flow.paletteInstruction')}</p>
+        {paletteGroups.map(group => <div className="palette-group" key={group.label}>
+          <span>{t(group.label)}</span>
+          {group.types.map(type => {
+            const item = palette.find(candidate => candidate.type === type)!
+            const Icon = item.icon
+            return <button key={item.type} className="palette-btn" title={t(nodeDescriptionKeys[item.type])} draggable onDragStart={event => { event.dataTransfer.setData('application/nemesys-node-kind', item.type); event.dataTransfer.effectAllowed = 'copy' }} onClick={() => addNode(item.type)}><Icon size={16} /><span>{t(nodeLabelKeys[item.type])}</span></button>
+          })}
+        </div>)}
         <div className="palette-note"><Play size={14} /> {t('flow.paletteNote')}</div>
       </aside>
 
       <section className="canvas panel">
         <div className="canvas-toolbar">
-          <div><strong>{flow.name}</strong><span>{t('flow.stats', { nodes: nodes.length, edges: edges.length, version: publishedVersion ?? '—' })}</span></div>
+          <div><strong>{flow.name}</strong><span>{t('flow.stats', { nodes: nodes.length, edges: edges.length, version: publishedVersion ?? '—' })}</span><small className={dirty ? 'draft-state unsaved' : 'draft-state'}>{dirty ? t('flow.unsavedChanges') : t('flow.allSaved')}</small></div>
           <div className="toolbar-actions">
             <input
               ref={importInput}
@@ -187,18 +262,19 @@ export default function FlowEditor({ flow, onSave, onPublish, onExport, onImport
                 event.target.value = ''
               }}
             />
-            <button className="icon-btn" title={t('flow.import')} aria-label={t('flow.import')} disabled={saving || publishing || importing} onClick={() => importInput.current?.click()}><FileUp size={16} /></button>
-            <button className="icon-btn" title={t('flow.export')} aria-label={t('flow.export')} disabled={saving || publishing || importing} onClick={() => onExport(buildFlow())}><Download size={16} /></button>
-            <button className="secondary-btn" disabled={saving || publishing || importing} onClick={() => onSave(buildFlow())}><Save size={16} />{saving ? t('flow.saving') : t('flow.saveDraft')}</button>
-            <button className="primary-btn" disabled={saving || publishing || importing} onClick={() => onPublish(buildFlow())}><UploadCloud size={16} />{publishing ? t('flow.publishing') : t('flow.publish')}</button>
+            <button className="secondary-btn toolbar-file-action" title={t('flow.import')} disabled={saving || publishing || importing} onClick={() => importInput.current?.click()}><FileUp size={16} /><span className="button-label">{t('flow.importShort')}</span></button>
+            <button className="secondary-btn toolbar-file-action" title={t('flow.export')} disabled={saving || publishing || importing} onClick={() => onExport(buildFlow())}><Download size={16} /><span className="button-label">{t('flow.exportShort')}</span></button>
+            <button className="secondary-btn" disabled={saving || publishing || importing} onClick={() => void saveDraft()}><Save size={16} />{saving ? t('flow.saving') : t('flow.saveDraft')}</button>
+            <button className="secondary-btn guided-action" disabled={saving || publishing || importing} onClick={() => void saveAndTest()}><PlayCircle size={16} />{t('flow.saveAndTest')}</button>
+            <button className="primary-btn" disabled={saving || publishing || importing} onClick={() => void publishFlow()}><UploadCloud size={16} />{publishing ? t('flow.publishing') : t('flow.publish')}</button>
           </div>
         </div>
         <div className="flow-area">
           <ReactFlow
             nodes={nodes}
             edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
+            onNodesChange={handleNodesChange}
+            onEdgesChange={handleEdgesChange}
             onConnect={onConnect}
             onInit={instance => setToFlowPosition(() => (position: { x: number; y: number }) => instance.screenToFlowPosition(position))}
             onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy' }}
@@ -218,13 +294,14 @@ export default function FlowEditor({ flow, onSave, onPublish, onExport, onImport
 
       <aside className="properties panel">
         <div className="section-title">{t('flow.properties')}</div>
-        {!selected && !selectedEdge && <div className="empty-state">{t('flow.selectHint')}</div>}
+        {!selected && !selectedEdge && <div className="properties-guide"><MousePointerClick size={23} /><strong>{t('flow.selectHintTitle')}</strong><span>{t('flow.selectHint')}</span><ol><li>{t('flow.guideAdd')}</li><li>{t('flow.guideConnect')}</li><li>{t('flow.guideConfigure')}</li></ol></div>}
         {selectedEdge && <>
           <label>{t('flow.routeCondition')}<input value={String((selectedEdge.data?.condition as string | null | undefined) || selectedEdge.label || '')} onChange={e => updateSelectedEdge(e.target.value)} placeholder={t('flow.routePlaceholder')} /></label>
           <div className="field-hint">{t('flow.routeHint')}</div>
           <button className="danger-btn" onClick={deleteSelection}><Trash2 size={15} />{t('flow.deleteEdge')}</button>
         </>}
         {selected && <>
+          {kind && <div className="selected-kind-help"><strong>{t(nodeLabelKeys[kind])}</strong><span>{t(nodeDescriptionKeys[kind])}</span></div>}
           <label>{t('flow.label')}<input value={String(selected.data.label || '')} onChange={e => updateSelected('label', e.target.value)} /></label>
           <div className="field-hint">{t('flow.nodeId', { id: selected.id })}</div>
           {kind === 'prompt' && <label>{t('flow.message')}<textarea value={String(config.message || '')} onChange={e => updateSelected('config', { ...config, message: e.target.value })} /></label>}

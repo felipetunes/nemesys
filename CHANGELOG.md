@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.11.0 — 2026-09-01
+
+### Added
+
+- Dismissible four-step quick-start guide and a permanent task-oriented Help dialog.
+- Skip-to-content navigation and consistent visible keyboard focus across interactive controls.
+- Grouped editor palette, contextual configuration guidance, unsaved-change indicator and explicit import/export controls.
+- Save-and-test editor action that validates and persists a draft before opening the simulator.
+- Unsaved-draft protection for browser exits and in-app navigation away from the editor.
+- Agent next-action guidance with one-click queue entry and exit.
+- Plain-language role descriptions in workspace user creation.
+
+### Changed
+
+- User creation is progressively disclosed so the member list remains the primary administration view.
+- The visual editor is lazy-loaded, reducing the initial production bundle from about 513 kB to 312 kB.
+- Presence controls are disabled during an active interaction to prevent accidental routing-state changes.
+
 ## 0.10.0 — 2026-09-01
 
 ### Added

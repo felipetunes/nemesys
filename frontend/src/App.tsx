@@ -4,6 +4,7 @@ import {
   BarChart3,
   Bot,
   Cable,
+  CircleHelp,
   GitBranch,
   Headphones,
   History,
@@ -22,7 +23,7 @@ import { api } from './api'
 import AccessDialog from './components/AccessDialog'
 import CollaborateQueue from './components/CollaborateQueue'
 import FlowCatalog from './components/FlowCatalog'
-import FlowEditor from './components/FlowEditor'
+import HelpCenter, { GettingStarted, type LearningDestination } from './components/LearningGuide'
 import MetricsDashboard from './components/MetricsDashboard'
 import Simulator from './components/Simulator'
 import VersionHistory from './components/VersionHistory'
@@ -37,6 +38,8 @@ type CollaborateTab = 'overview' | 'queue'
 
 const APPLICATION_STORAGE_KEY = 'nemesys_application'
 const SELECTED_FLOW_STORAGE_KEY = 'nemesys_selected_flow'
+const GUIDE_HIDDEN_STORAGE_KEY = 'nemesys_getting_started_hidden'
+const FlowEditor = lazy(() => import('./components/FlowEditor'))
 const UserManagement = lazy(() => import('./components/UserManagement'))
 
 function initialApplication(): Application {
@@ -68,6 +71,9 @@ export default function App() {
   const [accessChecked, setAccessChecked] = useState(false)
   const [accessRevision, setAccessRevision] = useState(0)
   const [showAccess, setShowAccess] = useState(false)
+  const [showHelp, setShowHelp] = useState(false)
+  const [showGuide, setShowGuide] = useState(() => window.localStorage.getItem(GUIDE_HIDDEN_STORAGE_KEY) !== 'true')
+  const [editorDirty, setEditorDirty] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -111,9 +117,40 @@ export default function App() {
   const visibleApplication = accessChecked && application === 'admin' && !canAdminister ? 'architect' : application
 
   const setApplication = (nextApplication: Application) => {
+    if (nextApplication !== 'architect' && visibleApplication === 'architect' && architectTab === 'editor' && editorDirty && !window.confirm(t('flow.leaveUnsavedConfirm'))) return false
+    if (nextApplication !== 'architect') setEditorDirty(false)
     window.localStorage.setItem(APPLICATION_STORAGE_KEY, nextApplication)
     setApplicationState(nextApplication)
     setActionError('')
+    return true
+  }
+
+  const openArchitectTab = (nextTab: ArchitectTab) => {
+    if (nextTab !== 'editor' && architectTab === 'editor' && editorDirty && !window.confirm(t('flow.leaveUnsavedConfirm'))) return false
+    if (nextTab !== 'editor') setEditorDirty(false)
+    setArchitectTab(nextTab)
+    return true
+  }
+
+  const navigateToLearningDestination = (destination: LearningDestination) => {
+    setShowHelp(false)
+    setActionError('')
+    if (destination === 'agent') {
+      if (!setApplication('collaborate')) return
+      setCollaborateTab('queue')
+      return
+    }
+    if (destination === 'users') {
+      setApplication('admin')
+      return
+    }
+    if (!setApplication('architect')) return
+    openArchitectTab(destination === 'catalog' ? 'ivrs' : destination)
+  }
+
+  const dismissGuide = () => {
+    window.localStorage.setItem(GUIDE_HIDDEN_STORAGE_KEY, 'true')
+    setShowGuide(false)
   }
 
   const showNotice = (message: string) => {
@@ -174,8 +211,12 @@ export default function App() {
       setHistoryFlow(saved)
       setFlows(current => current.map(item => item.id === saved.id ? saved : item))
       showNotice(validationSuccessMessage(validation, t('notice.draftSaved'), count => t('validation.warningCount', { count })))
+      return true
     }
-    catch (error) { setActionError(error instanceof Error ? error.message : String(error)) }
+    catch (error) {
+      setActionError(error instanceof Error ? error.message : String(error))
+      return false
+    }
     finally { setSaving(false) }
   }
 
@@ -195,8 +236,12 @@ export default function App() {
         t('notice.versionPublished', { version: published.version ?? '—' }),
         count => t('validation.warningCount', { count }),
       ))
+      return true
     }
-    catch (error) { setActionError(error instanceof Error ? error.message : String(error)) }
+    catch (error) {
+      setActionError(error instanceof Error ? error.message : String(error))
+      return false
+    }
     finally { setPublishing(false) }
   }
 
@@ -335,6 +380,7 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      <a className="skip-link" href="#main-content">{t('actions.skipToContent')}</a>
       <header className="shell-header">
         <div className="topbar">
           <div className="brand">
@@ -365,6 +411,7 @@ export default function App() {
                 <option value="en-US">EN-US</option>
               </select>
             </label>
+            <button className="help-btn" onClick={() => setShowHelp(true)} title={t('actions.help')}><CircleHelp size={16} />{t('actions.help')}</button>
             <button className={`access-btn${hasManagementToken ? ' configured' : ''}`} onClick={() => setShowAccess(true)} title={t('actions.configureAccess')}><KeyRound size={16} />{t('actions.access')}</button>
           </div>
         </div>
@@ -379,11 +426,11 @@ export default function App() {
           </div>
           {visibleApplication === 'architect' ? (
             <nav className="section-nav" aria-label={t('app.architect')}>
-              <button className={architectTab === 'ivrs' ? 'active' : ''} onClick={() => setArchitectTab('ivrs')}><ListTree size={16} />{t('nav.ivrs')}</button>
-              <button className={architectTab === 'editor' ? 'active' : ''} onClick={() => setArchitectTab('editor')}><GitBranch size={16} />{t('nav.editor')}</button>
-              <button className={architectTab === 'simulator' ? 'active' : ''} onClick={() => setArchitectTab('simulator')}><PlayCircle size={16} />{t('nav.simulator')}</button>
-              <button className={architectTab === 'history' ? 'active' : ''} onClick={() => setArchitectTab('history')}><History size={16} />{t('nav.history')}</button>
-              <button className={architectTab === 'architecture' ? 'active' : ''} onClick={() => setArchitectTab('architecture')}><Activity size={16} />{t('nav.architecture')}</button>
+              <button className={architectTab === 'ivrs' ? 'active' : ''} onClick={() => openArchitectTab('ivrs')}><ListTree size={16} />{t('nav.ivrs')}</button>
+              <button className={architectTab === 'editor' ? 'active' : ''} onClick={() => openArchitectTab('editor')}><GitBranch size={16} />{t('nav.editor')}</button>
+              <button className={architectTab === 'simulator' ? 'active' : ''} onClick={() => openArchitectTab('simulator')}><PlayCircle size={16} />{t('nav.simulator')}</button>
+              <button className={architectTab === 'history' ? 'active' : ''} onClick={() => openArchitectTab('history')}><History size={16} />{t('nav.history')}</button>
+              <button className={architectTab === 'architecture' ? 'active' : ''} onClick={() => openArchitectTab('architecture')}><Activity size={16} />{t('nav.architecture')}</button>
             </nav>
           ) : visibleApplication === 'collaborate' ? (
             <nav className="section-nav" aria-label={t('app.collaborate')}>
@@ -398,15 +445,17 @@ export default function App() {
         </div>
       </header>
 
-      <main>
+      <main id="main-content">
         {notice && <div className="toast"><Save size={15} />{notice}</div>}
         {actionError && <div className="error-box top-error">{actionError}</div>}
+
+        {!flowLoading && visibleApplication === 'architect' && architectTab === 'ivrs' && showGuide && <GettingStarted hasFlow={Boolean(flow)} onNavigate={navigateToLearningDestination} onDismiss={dismissGuide} />}
 
         {visibleApplication === 'architect' && <>
           {flowError && <div className="error-box top-error">{flowError}</div>}
           {flowLoading && <div className="loading"><LoaderCircle className="spin" />{t('app.loadingFlow')}</div>}
           {!flowLoading && architectTab === 'ivrs' && <FlowCatalog flows={flows} selectedFlowId={flow?.id ?? null} creating={creatingFlow} busyFlowId={busyFlowId} onCreate={createFlow} onOpen={openFlow} onHistory={openHistory} onDuplicate={duplicateFlow} onArchive={archiveFlow} onRestore={restoreFlow} onDelete={deleteFlow} />}
-          {!flowLoading && architectTab === 'editor' && (flow ? <FlowEditor key={`${flow.id}:${flow.updated_at ?? ''}`} flow={flow} onSave={save} onPublish={publish} onExport={exportFlow} onImport={importFlow} saving={saving} publishing={publishing} importing={importing} publishedVersion={publishedVersion} /> : <FlowSelectionRequired onBack={() => setArchitectTab('ivrs')} />)}
+          {!flowLoading && architectTab === 'editor' && (flow ? <Suspense fallback={<div className="loading"><LoaderCircle className="spin" />{t('app.loadingEditor')}</div>}><FlowEditor key={`${flow.id}:${flow.updated_at ?? ''}`} flow={flow} onSave={save} onPublish={publish} onExport={exportFlow} onImport={importFlow} onTest={() => setArchitectTab('simulator')} onDirtyChange={setEditorDirty} saving={saving} publishing={publishing} importing={importing} publishedVersion={publishedVersion} /></Suspense> : <FlowSelectionRequired onBack={() => openArchitectTab('ivrs')} />)}
           {!flowLoading && architectTab === 'simulator' && (flow ? <Simulator flow={flow} /> : <FlowSelectionRequired onBack={() => setArchitectTab('ivrs')} />)}
           {!flowLoading && architectTab === 'history' && ((historyFlow ?? flow) ? <VersionHistory key={`${(historyFlow ?? flow)!.id}:${(historyFlow ?? flow)!.updated_at ?? ''}`} flow={(historyFlow ?? flow)!} restoring={restoringVersion} onRestore={restoreFlowVersion} /> : <FlowSelectionRequired onBack={() => setArchitectTab('ivrs')} />)}
           {!flowLoading && architectTab === 'architecture' && <Architecture />}
@@ -420,6 +469,7 @@ export default function App() {
         {visibleApplication === 'admin' && <Suspense fallback={<div className="loading"><LoaderCircle className="spin" />{t('users.loading')}</div>}><UserManagement key={accessRevision} /></Suspense>}
       </main>
       {showAccess && <AccessDialog configured={hasManagementToken} onClose={() => setShowAccess(false)} onAuthenticated={refreshAccess} onClear={clearAccess} />}
+      {showHelp && <HelpCenter canAdminister={canAdminister} hasFlow={Boolean(flow)} onNavigate={navigateToLearningDestination} onClose={() => setShowHelp(false)} />}
     </div>
   )
 }

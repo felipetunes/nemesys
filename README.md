@@ -4,7 +4,7 @@
 [![Release](https://img.shields.io/github/v/release/felipetunes/nemesys)](https://github.com/felipetunes/nemesys/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-7c5cff.svg)](LICENSE)
 
-**Current project version: `0.10.0` — user administration and agent desktop**
+**Current project version: `0.11.0` — guided onboarding and usability**
 
 **A visual, AI-assisted IVR flow builder and runtime for learning, prototyping and portfolio demos.**
 
@@ -50,13 +50,19 @@ Traditional IVRs are often built inside proprietary platforms. Nemesys exposes t
 - a persistent Architect catalog for creating, selecting and evolving multiple IVRs;
 - contextual descriptions for every node type in the palette and flow canvas;
 - IVR duplication, archival, restoration and protected permanent deletion;
-- published-version comparison and rollback to the editable draft.
+- published-version comparison and rollback to the editable draft;
 - provider-neutral flow outcomes with success/failure tracking and metrics;
 - persistent agent presence and routing status;
-- assigned-interaction handling and traceable after-call work with wrap-up codes.
+- assigned-interaction handling and traceable after-call work with wrap-up codes;
 - workspace user creation, roles, activation and removal from a dedicated administration area;
 - an authenticated, customer-centered agent desktop with inbox, journey context and wrap-up controls;
-- server-side agent identity enforcement that prevents an authenticated user from acting as another agent.
+- server-side agent identity enforcement that prevents an authenticated user from acting as another agent;
+- a persistent Help entry point and dismissible four-step quick-start guide;
+- a task-oriented editor with grouped nodes, contextual instructions, explicit file actions, unsaved-change protection and save-and-test workflow;
+- actionable agent guidance with one-click queue entry and clear next-step messaging;
+- progressive user-creation disclosure and plain-language role descriptions;
+- consistent keyboard focus and a skip-to-content shortcut for accessible navigation;
+- lazy-loaded visual editor for a substantially smaller initial application bundle.
 
 ## Product areas and languages
 
@@ -67,6 +73,8 @@ Nemesys separates design-time and operational responsibilities while keeping one
 - **Administration** contains workspace user creation, role assignment, activation/deactivation and member removal.
 
 The interface starts in Brazilian Portuguese (`pt-BR`). Use the language selector in the top bar to switch to English (`en-US`); the selection is saved locally in the browser.
+
+New users receive a four-step guide from IVR selection through browser testing and agent operation. The permanent **Help** action offers task-based shortcuts, and the guide can be dismissed without removing access to help.
 
 ## Demo flow
 

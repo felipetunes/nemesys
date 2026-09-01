@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Power, RefreshCw, ShieldCheck, Trash2, UserPlus, UsersRound } from 'lucide-react'
+import { Power, RefreshCw, ShieldCheck, Trash2, UserPlus, UsersRound, X } from 'lucide-react'
 import { api } from '../api'
 import { useI18n, type TranslationKey } from '../i18n'
 import type { AuthMe, WorkspaceMember, WorkspaceRole } from '../types'
@@ -21,6 +21,7 @@ export default function UserManagement() {
   const [role, setRole] = useState<WorkspaceRole>('editor')
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
+  const [showCreate, setShowCreate] = useState(false)
   const [busyUserId, setBusyUserId] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -46,6 +47,7 @@ export default function UserManagement() {
         if (!active) return
         setMembers(nextMembers)
         setCurrentUser(me)
+        if (nextMembers.length === 0) setShowCreate(true)
       })
       .catch(reason => { if (active) setError(reason instanceof Error ? reason.message : String(reason)) })
       .finally(() => { if (active) setLoading(false) })
@@ -63,6 +65,7 @@ export default function UserManagement() {
       setEmail('')
       setPassword('')
       setRole('editor')
+      setShowCreate(false)
       setNotice(t('users.created', { email: member.email }))
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason))
@@ -121,10 +124,14 @@ export default function UserManagement() {
   return <div className="users-page">
     <div className="users-heading">
       <div><span className="eyebrow">{t('users.eyebrow')}</span><h1>{t('users.title')}</h1><p>{t('users.description')}</p></div>
-      <button className="secondary-btn" onClick={() => void load()} disabled={loading}><RefreshCw size={16} className={loading ? 'spin' : ''} />{t('metrics.refresh')}</button>
+      <div className="users-heading-actions">
+        <button className="secondary-btn" onClick={() => void load()} disabled={loading}><RefreshCw size={16} className={loading ? 'spin' : ''} />{t('metrics.refresh')}</button>
+        <button className="primary-btn" onClick={() => setShowCreate(true)}><UserPlus size={16} />{t('users.add')}</button>
+      </div>
     </div>
 
-    <section className="user-create panel">
+    {showCreate && <section className="user-create panel">
+      <button className="dialog-close" aria-label={t('access.close')} onClick={() => setShowCreate(false)}><X size={17} /></button>
       <div className="user-create-copy"><div className="user-create-icon"><UserPlus size={22} /></div><div><h2>{t('users.createTitle')}</h2><p>{t('users.createDescription')}</p></div></div>
       <form onSubmit={createUser}>
         <label>{t('access.email')}<input type="email" required value={email} onChange={event => setEmail(event.target.value)} placeholder="agent@example.com" /></label>
@@ -132,8 +139,8 @@ export default function UserManagement() {
         <label>{t('users.role')}<select value={role} onChange={event => setRole(event.target.value as WorkspaceRole)}>{roles.map(item => <option key={item} value={item}>{t(roleKeys[item])}</option>)}</select></label>
         <button className="primary-btn" disabled={creating}><UserPlus size={16} />{creating ? t('users.creating') : t('users.create')}</button>
       </form>
-      <small>{t('users.passwordHint')}</small>
-    </section>
+      <div className="user-create-hints"><small>{t('users.passwordHint')}</small><small><ShieldCheck size={13} />{t(`role.${role}Description` as TranslationKey)}</small></div>
+    </section>}
 
     {error && <div className="error-box">{error}</div>}
     {notice && <div className="inline-notice"><ShieldCheck size={16} />{notice}</div>}

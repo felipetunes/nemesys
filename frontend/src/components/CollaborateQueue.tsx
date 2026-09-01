@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { Bot, ClipboardCheck, Clock3, Contact, Headphones, Inbox, ListChecks, LoaderCircle, MessageSquareText, Radio, RefreshCw, Save, UserCheck, UserRound } from 'lucide-react'
+import { Bot, ClipboardCheck, Clock3, Contact, Headphones, Inbox, ListChecks, LoaderCircle, MessageSquareText, Radio, RefreshCw, Save, Sparkles, UserCheck, UserRound } from 'lucide-react'
 import { api } from '../api'
 import { useI18n, type TranslationKey } from '../i18n'
 import type { AgentPresence, AgentRoutingStatus, AgentState, AuthMe, CallSession, WrapUpCode } from '../types'
@@ -55,6 +55,7 @@ export default function CollaborateQueue() {
   const [wrapUpNotes, setWrapUpNotes] = useState<Record<string, string>>({})
   const [claimingId, setClaimingId] = useState<string | null>(null)
   const [wrappingId, setWrappingId] = useState<string | null>(null)
+  const [presenceUpdating, setPresenceUpdating] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -119,12 +120,15 @@ export default function CollaborateQueue() {
 
   const updatePresence = async (presence: AgentPresence) => {
     if (!activeAgentName) return
+    setPresenceUpdating(true)
     setError('')
     try {
       setAgentState(await api.updateAgentPresence(activeAgentName, presence))
       setNotice(t('queue.presenceUpdated'))
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason))
+    } finally {
+      setPresenceUpdating(false)
     }
   }
 
@@ -173,6 +177,15 @@ export default function CollaborateQueue() {
 
   const selectedSession = assignedSessions.find(session => session.id === selectedSessionId) || assignedSessions[0]
   const currentWorkspace = currentUser?.workspaces.find(workspace => workspace.id === currentUser.active_workspace_id)
+  const nextActionKey: TranslationKey = !activeAgentName
+    ? 'agentDesktop.identityAction'
+    : agentState?.routing_status === 'interacting'
+      ? 'agentDesktop.interactingAction'
+      : agentState?.presence === 'on_queue' && agentState.routing_status === 'idle'
+        ? 'agentDesktop.readyAction'
+        : agentState?.routing_status === 'not_responding'
+          ? 'agentDesktop.unavailableAction'
+          : 'agentDesktop.queueAction'
 
   return <div className="queue-page agent-desktop-page">
     <div className="queue-heading">
@@ -190,7 +203,7 @@ export default function CollaborateQueue() {
         <div><small>{t('agentDesktop.signedInAs')}</small><strong>{activeAgentName || t('agentDesktop.noAgent')}</strong><span>{currentWorkspace ? t('agentDesktop.role', { role: t(`role.${currentWorkspace.role}` as TranslationKey) }) : t('agentDesktop.offlineIdentity')}</span></div>
       </div>
       <div className="agent-availability">
-        <label>{t('queue.presence')}<select disabled={!activeAgentName} value={agentState?.presence || 'offline'} onChange={event => void updatePresence(event.target.value as AgentPresence)}>{presenceOptions.map(presence => <option key={presence} value={presence}>{t(presenceKeys[presence])}</option>)}</select></label>
+        <label>{t('queue.presence')}<select disabled={!activeAgentName || presenceUpdating || agentState?.routing_status === 'interacting'} value={agentState?.presence || 'offline'} onChange={event => void updatePresence(event.target.value as AgentPresence)}>{presenceOptions.map(presence => <option key={presence} value={presence}>{t(presenceKeys[presence])}</option>)}</select></label>
         <div className="agent-routing"><span>{t('queue.routingStatus')}</span><strong className={`state-pill state-pill--${agentState?.routing_status || 'off_queue'}`}>{t(routingKeys[agentState?.routing_status || 'off_queue'])}</strong></div>
       </div>
       {!currentUser && <form className="agent-identity" onSubmit={useAgent}>
@@ -201,8 +214,11 @@ export default function CollaborateQueue() {
 
     {error && <div className="error-box">{error}</div>}
     {notice && <div className="inline-notice"><UserCheck size={16} />{notice}</div>}
-    {!activeAgentName && <div className="queue-guidance">{t('agentDesktop.selectIdentity')}</div>}
-    {activeAgentName && (agentState?.presence !== 'on_queue' || agentState.routing_status !== 'idle') && assignedSessions.length === 0 && <div className="queue-guidance">{t('queue.claimRequiresOnQueue')}</div>}
+    <section className={`agent-next-action${agentState?.presence === 'on_queue' && agentState.routing_status === 'idle' ? ' ready' : ''}`} aria-live="polite">
+      <Sparkles size={18} />
+      <div><strong>{t('agentDesktop.nextAction')}</strong><span>{t(nextActionKey)}</span></div>
+      {activeAgentName && agentState?.routing_status !== 'interacting' && <button className={agentState?.presence === 'on_queue' ? 'secondary-btn' : 'primary-btn'} disabled={presenceUpdating} onClick={() => void updatePresence(agentState?.presence === 'on_queue' ? 'available' : 'on_queue')}><Headphones size={16} />{t(agentState?.presence === 'on_queue' ? 'queue.leaveQueue' : 'queue.enterQueue')}</button>}
+    </section>
     {loading && sessions.length === 0 && assignedSessions.length === 0 && <div className="loading"><LoaderCircle className="spin" />{t('metrics.loading')}</div>}
 
     <section className="agent-workspace panel">
