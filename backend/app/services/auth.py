@@ -3,9 +3,11 @@ import hashlib
 import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from typing import cast
 from uuid import uuid4
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models import (
@@ -13,7 +15,9 @@ from app.models import (
     AuthTokenResponse,
     UserRow,
     WorkspaceInfo,
+    WorkspaceMember,
     WorkspaceMembershipRow,
+    WorkspaceRole,
     WorkspaceRow,
 )
 
@@ -29,7 +33,7 @@ class AuthenticatedUser:
     user_id: str
     email: str
     workspace_id: str
-    role: str
+    role: WorkspaceRole
 
 
 def hash_password(password: str) -> str:
@@ -58,6 +62,9 @@ def verify_password(password: str, encoded: str) -> bool:
         return False
 
 
+DUMMY_PASSWORD_HASH = hash_password("nemesys-login-timing-placeholder")
+
+
 class AuthService:
     def __init__(self, db: Session):
         self.db = db
@@ -79,14 +86,43 @@ class AuthService:
         self.db.add(UserRow(id=user_id, email=normalized_email, password_hash=hash_password(password)))
         self.db.add(WorkspaceRow(id=workspace_id, name=workspace_name.strip()))
         self.db.add(WorkspaceMembershipRow(user_id=user_id, workspace_id=workspace_id, role="owner"))
-        self.db.commit()
+        try:
+            self.db.commit()
+        except IntegrityError as exc:
+            self.db.rollback()
+            raise AuthError("An account with this email already exists") from exc
         return self._issue_token(user_id, normalized_email, session_days)
 
-    def login(self, email: str, password: str, session_days: int) -> AuthTokenResponse:
+    def login(
+        self,
+        email: str,
+        password: str,
+        session_days: int,
+        max_failed_attempts: int = 5,
+        lockout_minutes: int = 15,
+    ) -> AuthTokenResponse:
         normalized_email = email.strip().lower()
         user = self.db.scalar(select(UserRow).where(UserRow.email == normalized_email))
-        if user is None or not verify_password(password, user.password_hash):
+        if user is None:
+            verify_password(password, DUMMY_PASSWORD_HASH)
             raise AuthError("Invalid email or password")
+        now = datetime.now(UTC)
+        locked_until = user.locked_until
+        if locked_until is not None and locked_until.tzinfo is None:
+            locked_until = locked_until.replace(tzinfo=UTC)
+        if locked_until is not None and locked_until > now:
+            raise AuthError("Too many failed attempts; try again later")
+        if not verify_password(password, user.password_hash):
+            user.failed_login_attempts += 1
+            if user.failed_login_attempts >= max_failed_attempts:
+                user.locked_until = now + timedelta(minutes=lockout_minutes)
+                user.failed_login_attempts = 0
+            self.db.commit()
+            raise AuthError("Invalid email or password")
+        user.failed_login_attempts = 0
+        user.locked_until = None
+        user.last_login_at = now
+        self.db.commit()
         return self._issue_token(user.id, user.email, session_days)
 
     def resolve_token(self, token: str, requested_workspace_id: str | None) -> AuthenticatedUser | None:
@@ -115,7 +151,7 @@ class AuthService:
             user_id=user.id,
             email=user.email,
             workspace_id=membership.workspace_id,
-            role=membership.role,
+            role=cast(WorkspaceRole, membership.role),
         )
 
     def revoke_token(self, token: str) -> None:
@@ -130,9 +166,79 @@ class AuthService:
         rows = self.db.scalars(select(WorkspaceRow).where(WorkspaceRow.id.in_(workspace_ids))).all()
         names = {row.id: row.name for row in rows}
         return [
-            WorkspaceInfo(id=item.workspace_id, name=names.get(item.workspace_id, item.workspace_id), role=item.role)
+            WorkspaceInfo(
+                id=item.workspace_id,
+                name=names.get(item.workspace_id, item.workspace_id),
+                role=cast(WorkspaceRole, item.role),
+            )
             for item in memberships
         ]
+
+    def list_workspace_members(self, workspace_id: str) -> list[WorkspaceMember]:
+        rows = self.db.execute(
+            select(WorkspaceMembershipRow, UserRow)
+            .join(UserRow, UserRow.id == WorkspaceMembershipRow.user_id)
+            .where(WorkspaceMembershipRow.workspace_id == workspace_id)
+            .order_by(UserRow.email)
+        ).all()
+        return [
+            WorkspaceMember(user_id=user.id, email=user.email, role=cast(WorkspaceRole, membership.role))
+            for membership, user in rows
+        ]
+
+    def add_workspace_member(self, workspace_id: str, email: str, role: WorkspaceRole) -> WorkspaceMember:
+        normalized_email = email.strip().lower()
+        user = self.db.scalar(select(UserRow).where(UserRow.email == normalized_email))
+        if user is None:
+            raise AuthError("No account exists for this email")
+        key = (user.id, workspace_id)
+        if self.db.get(WorkspaceMembershipRow, key) is not None:
+            raise AuthError("User is already a member of this workspace")
+        self.db.add(WorkspaceMembershipRow(user_id=user.id, workspace_id=workspace_id, role=role))
+        try:
+            self.db.commit()
+        except IntegrityError as exc:
+            self.db.rollback()
+            raise AuthError("User is already a member of this workspace") from exc
+        return WorkspaceMember(user_id=user.id, email=user.email, role=role)
+
+    def update_workspace_member(
+        self,
+        workspace_id: str,
+        user_id: str,
+        role: WorkspaceRole,
+    ) -> WorkspaceMember:
+        membership = self.db.get(WorkspaceMembershipRow, (user_id, workspace_id))
+        user = self.db.get(UserRow, user_id)
+        if membership is None or user is None:
+            raise AuthError("Workspace member not found")
+        if membership.role == "owner" and role != "owner":
+            self._require_another_owner(workspace_id, user_id)
+        membership.role = role
+        self.db.commit()
+        return WorkspaceMember(user_id=user.id, email=user.email, role=role)
+
+    def remove_workspace_member(self, workspace_id: str, user_id: str) -> None:
+        membership = self.db.get(WorkspaceMembershipRow, (user_id, workspace_id))
+        if membership is None:
+            raise AuthError("Workspace member not found")
+        if membership.role == "owner":
+            self._require_another_owner(workspace_id, user_id)
+        self.db.delete(membership)
+        self.db.commit()
+
+    def _require_another_owner(self, workspace_id: str, user_id: str) -> None:
+        another_owner = self.db.scalar(
+            select(func.count())
+            .select_from(WorkspaceMembershipRow)
+            .where(
+                WorkspaceMembershipRow.workspace_id == workspace_id,
+                WorkspaceMembershipRow.role == "owner",
+                WorkspaceMembershipRow.user_id != user_id,
+            )
+        )
+        if not another_owner:
+            raise AuthError("A workspace must retain at least one owner")
 
     def _issue_token(self, user_id: str, email: str, session_days: int) -> AuthTokenResponse:
         token = secrets.token_urlsafe(32)

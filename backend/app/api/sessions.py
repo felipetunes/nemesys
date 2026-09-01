@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.core.auth import WorkspaceAccess, require_management_access
+from app.core.auth import WorkspaceAccess, require_editor_access, require_viewer_access
 from app.core.db import get_db
 from app.engine.runtime import FlowEngine, FlowEngineError
 from app.models import CallSession, SessionCreate, SessionInput
+from app.services.audit import AuditService
 from app.services.flow_repository import FlowRepository
 from app.services.session_repository import SessionConflictError, SessionRepository
 
@@ -15,7 +16,7 @@ engine = FlowEngine()
 @router.post("", response_model=CallSession)
 def create_session(
     payload: SessionCreate,
-    access: WorkspaceAccess = Depends(require_management_access),
+    access: WorkspaceAccess = Depends(require_editor_access),
     db: Session = Depends(get_db),
 ) -> CallSession:
     flow_repo = FlowRepository(db, access.workspace_id)
@@ -30,13 +31,21 @@ def create_session(
         session = engine.create_session(flow, payload.initial_variables)
     except FlowEngineError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return SessionRepository(db, access.workspace_id).create(session)
+    created = SessionRepository(db, access.workspace_id).create(session)
+    AuditService(db, access.workspace_id).record(
+        actor=access.email or access.user_id or "admin",
+        action="session.created",
+        resource_type="session",
+        resource_id=created.id,
+        details={"flow_id": created.flow_id, "flow_version": created.flow_version},
+    )
+    return created
 
 
 @router.get("/{session_id}", response_model=CallSession)
 def get_session(
     session_id: str,
-    access: WorkspaceAccess = Depends(require_management_access),
+    access: WorkspaceAccess = Depends(require_viewer_access),
     db: Session = Depends(get_db),
 ) -> CallSession:
     session = SessionRepository(db, access.workspace_id).get(session_id)
@@ -49,7 +58,7 @@ def get_session(
 def submit_input(
     session_id: str,
     payload: SessionInput,
-    access: WorkspaceAccess = Depends(require_management_access),
+    access: WorkspaceAccess = Depends(require_editor_access),
     db: Session = Depends(get_db),
 ) -> CallSession:
     session_repo = SessionRepository(db, access.workspace_id)
@@ -62,7 +71,15 @@ def submit_input(
     expected_revision = session.revision
     try:
         engine.submit_input(flow, session, payload.value)
-        return session_repo.save(session, expected_revision=expected_revision)
+        saved = session_repo.save(session, expected_revision=expected_revision)
+        AuditService(db, access.workspace_id).record(
+            actor=access.email or access.user_id or "admin",
+            action="session.input_submitted",
+            resource_type="session",
+            resource_id=session_id,
+            details={"status": saved.status},
+        )
+        return saved
     except FlowEngineError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except SessionConflictError as exc:

@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
@@ -12,6 +12,7 @@ from app.core.db import Base
 NodeType = Literal["start", "prompt", "collect_input", "ai_intent", "decision", "set_variable", "queue", "end"]
 VariableName = Annotated[str, Field(min_length=1, max_length=120, pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")]
 FlowIdentifier = Annotated[str, Field(min_length=1, max_length=120, pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]*$")]
+WorkspaceRole = Literal["viewer", "editor", "admin", "owner"]
 
 
 class StrictModel(BaseModel):
@@ -126,8 +127,8 @@ class FlowDefinition(StrictModel):
 
 class FlowRow(Base):
     __tablename__ = "flows"
+    workspace_id: Mapped[str] = mapped_column(String(36), primary_key=True, default="default", index=True)
     id: Mapped[str] = mapped_column(String(120), primary_key=True)
-    workspace_id: Mapped[str] = mapped_column(String(36), default="default", index=True)
     name: Mapped[str] = mapped_column(String(200))
     description: Mapped[str] = mapped_column(Text, default="")
     definition_json: Mapped[str] = mapped_column(Text)
@@ -136,9 +137,9 @@ class FlowRow(Base):
 
 class FlowVersionRow(Base):
     __tablename__ = "flow_versions"
+    workspace_id: Mapped[str] = mapped_column(String(36), primary_key=True, default="default", index=True)
     flow_id: Mapped[str] = mapped_column(String(120), primary_key=True)
     version: Mapped[int] = mapped_column(Integer, primary_key=True)
-    workspace_id: Mapped[str] = mapped_column(String(36), default="default", index=True)
     definition_json: Mapped[str] = mapped_column(Text)
     published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
@@ -223,7 +224,22 @@ class LoginRequest(StrictModel):
 class WorkspaceInfo(StrictModel):
     id: str
     name: str
-    role: str
+    role: WorkspaceRole
+
+
+class WorkspaceMember(StrictModel):
+    user_id: str
+    email: str
+    role: WorkspaceRole
+
+
+class WorkspaceMemberCreate(StrictModel):
+    email: str = Field(min_length=5, max_length=320)
+    role: WorkspaceRole = "viewer"
+
+
+class WorkspaceMemberRoleUpdate(StrictModel):
+    role: WorkspaceRole
 
 
 class AuthTokenResponse(StrictModel):
@@ -253,11 +269,17 @@ class UserRow(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(500))
+    failed_login_attempts: Mapped[int] = mapped_column(Integer, default=0)
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
 
 class WorkspaceMembershipRow(Base):
     __tablename__ = "workspace_memberships"
+    __table_args__ = (
+        CheckConstraint("role IN ('viewer', 'editor', 'admin', 'owner')", name="ck_membership_role"),
+    )
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
     workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"), primary_key=True)
     role: Mapped[str] = mapped_column(String(30), default="owner")
@@ -273,7 +295,14 @@ class AuthSessionRow(Base):
 
 class SessionRow(Base):
     __tablename__ = "sessions"
-    __table_args__ = (UniqueConstraint("provider", "provider_call_id", name="uq_session_provider_call"),)
+    __table_args__ = (
+        UniqueConstraint(
+            "workspace_id",
+            "provider",
+            "provider_call_id",
+            name="uq_session_workspace_provider_call",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     workspace_id: Mapped[str] = mapped_column(String(36), default="default", index=True)
@@ -285,3 +314,27 @@ class SessionRow(Base):
     provider_call_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
     revision: Mapped[int] = mapped_column(Integer, default=0)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+
+
+class AuditEvent(StrictModel):
+    id: str
+    workspace_id: str
+    actor: str
+    action: str
+    resource_type: str
+    resource_id: str | None = None
+    details: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
+
+
+class AuditEventRow(Base):
+    __tablename__ = "audit_events"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(String(36), index=True)
+    actor: Mapped[str] = mapped_column(String(320))
+    action: Mapped[str] = mapped_column(String(120), index=True)
+    resource_type: Mapped[str] = mapped_column(String(120))
+    resource_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    details_json: Mapped[str] = mapped_column(Text, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), index=True)

@@ -83,7 +83,7 @@ export default function FlowEditor({ flow, onSave, onPublish, onExport, onImport
 
   const dropNode = (event: ReactDragEvent<HTMLDivElement>) => {
     event.preventDefault()
-    const kind = event.dataTransfer.getData('application/revelys-node-kind') as NodeKind
+    const kind = event.dataTransfer.getData('application/nemesys-node-kind') as NodeKind
     if (!toFlowPosition || !palette.some(item => item.type === kind)) return
     addNode(kind, toFlowPosition({ x: event.clientX, y: event.clientY }))
   }
@@ -139,7 +139,7 @@ export default function FlowEditor({ flow, onSave, onPublish, onExport, onImport
         <div className="section-title"><Plus size={15} /> Nodes</div>
         {palette.map(item => {
           const Icon = item.icon
-          return <button key={item.type} className="palette-btn" draggable onDragStart={event => { event.dataTransfer.setData('application/revelys-node-kind', item.type); event.dataTransfer.effectAllowed = 'copy' }} onClick={() => addNode(item.type)}><Icon size={16} /><span>{item.label}</span></button>
+          return <button key={item.type} className="palette-btn" draggable onDragStart={event => { event.dataTransfer.setData('application/nemesys-node-kind', item.type); event.dataTransfer.effectAllowed = 'copy' }} onClick={() => addNode(item.type)}><Icon size={16} /><span>{item.label}</span></button>
         })}
         <div className="palette-note"><Play size={14} /> Start nodes are intentionally unique. Use the seeded one.</div>
       </aside>

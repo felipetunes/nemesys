@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-os.environ.setdefault("DATABASE_URL", "sqlite:///./data/test_revelys.db")
+os.environ.setdefault("DATABASE_URL", "sqlite:///./data/test_nemesys.db")
 
 from app.core.db import Base  # noqa: E402
 

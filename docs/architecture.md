@@ -43,12 +43,12 @@ Converts provider webhook calls into the same session operations used by the bro
 
 ### Identity and workspaces
 
-Passwords use salted PBKDF2 derivation. Only token hashes are persisted, tokens expire, and logout revokes them. API access resolves one workspace membership and applies that workspace to flow, version, session, queue and metric queries. With authentication disabled, the same code uses the `default` offline workspace.
+Passwords use salted PBKDF2 derivation. Only token hashes are persisted, tokens expire, logout revokes them, and repeated failures temporarily lock the account. API access resolves one workspace membership and enforces viewer, editor, admin or owner permissions. Workspace IDs participate in flow/version primary keys and provider-call uniqueness constraints, so tenants may safely reuse their own identifiers. With authentication disabled, the same code uses the `default` offline workspace.
 
 ### Operations
 
-Terminal sessions have configurable retention. Metrics are computed from persisted sessions and their trace timestamps, including volume, state, intent, channel, completion rate and duration. A queue node pauses the engine in a traceable `queued` state until an explicit agent claim resumes deterministic routing.
+Terminal sessions have configurable retention. Metrics are computed from persisted sessions and their trace timestamps, including volume, state, intent, channel, completion rate and duration. A queue node pauses the engine in a traceable `queued` state until an explicit agent claim resumes deterministic routing. Sensitive management operations append workspace-scoped audit events; request IDs and structured completion logs make API failures correlatable without logging request bodies.
 
 ## Production evolution
 
-The included production profile applies Alembic migrations, uses PostgreSQL as the durable source of truth and provisions Redis for the next distributed-worker milestone. Further production work includes pushing traces onto an event bus, object storage for recordings, OpenTelemetry, key rotation and external identity-provider integration.
+The included production profile applies Alembic migrations, uses PostgreSQL as the durable source of truth and provisions Redis for the next distributed-worker milestone. Further production work includes pushing traces onto an event bus, object storage for recordings, OpenTelemetry export and alerting, key rotation and external identity-provider integration.

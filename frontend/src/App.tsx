@@ -17,7 +17,7 @@ export default function App() {
   const [publishedVersion, setPublishedVersion] = useState<number | null>(null)
   const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
-  const [hasManagementToken, setHasManagementToken] = useState(() => Boolean(window.sessionStorage.getItem('revelys_management_token')))
+  const [hasManagementToken, setHasManagementToken] = useState(() => Boolean(window.sessionStorage.getItem('nemesys_management_token')))
   const [accessRevision, setAccessRevision] = useState(0)
   const [showAccess, setShowAccess] = useState(false)
 
@@ -91,7 +91,7 @@ export default function App() {
   }
 
   const refreshAccess = () => {
-    setHasManagementToken(Boolean(window.sessionStorage.getItem('revelys_management_token')))
+    setHasManagementToken(Boolean(window.sessionStorage.getItem('nemesys_management_token')))
     setFlow(null)
     setError('')
     setAccessRevision(value => value + 1)
@@ -99,15 +99,15 @@ export default function App() {
   }
 
   const clearAccess = () => {
-    window.sessionStorage.removeItem('revelys_management_token')
-    window.sessionStorage.removeItem('revelys_workspace_id')
+    window.sessionStorage.removeItem('nemesys_management_token')
+    window.sessionStorage.removeItem('nemesys_workspace_id')
     refreshAccess()
   }
 
   return (
     <div className="app-shell">
       <header className="topbar">
-        <div className="brand"><div className="brand-mark"><Network size={20} /></div><div><strong>Revelys</strong><span>AI-assisted call flow engineering</span></div></div>
+        <div className="brand"><div className="brand-mark"><Network size={20} /></div><div><strong>Nemesys</strong><span>AI-assisted call flow engineering</span></div></div>
         <nav>
           <button className={tab === 'editor' ? 'active' : ''} onClick={() => setTab('editor')}><GitBranch size={16} />Flow editor</button>
           <button className={tab === 'simulator' ? 'active' : ''} onClick={() => setTab('simulator')}><PlayCircle size={16} />Simulator</button>
@@ -116,7 +116,7 @@ export default function App() {
         </nav>
         <div className="topbar-actions">
           <button className={`access-btn${hasManagementToken ? ' configured' : ''}`} onClick={() => setShowAccess(true)} title="Configure workspace access"><KeyRound size={16} />Access</button>
-          <a className="github-link" href="https://github.com/felipetunes/revelys" target="_blank" rel="noreferrer"><Github size={17} />GitHub</a>
+          <a className="github-link" href="https://github.com/felipetunes/nemesys" target="_blank" rel="noreferrer"><Github size={17} />GitHub</a>
         </div>
       </header>
 

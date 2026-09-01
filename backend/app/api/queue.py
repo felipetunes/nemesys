@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.core.auth import WorkspaceAccess, require_management_access
+from app.core.auth import WorkspaceAccess, require_editor_access, require_viewer_access
 from app.core.db import get_db
 from app.engine.runtime import FlowEngine, FlowEngineError
 from app.models import CallSession, QueueClaim
+from app.services.audit import AuditService
 from app.services.flow_repository import FlowRepository
 from app.services.session_repository import SessionConflictError, SessionRepository
 
@@ -14,7 +15,7 @@ engine = FlowEngine()
 
 @router.get("", response_model=list[CallSession])
 def list_queued_sessions(
-    access: WorkspaceAccess = Depends(require_management_access),
+    access: WorkspaceAccess = Depends(require_viewer_access),
     db: Session = Depends(get_db),
 ) -> list[CallSession]:
     return SessionRepository(db, access.workspace_id).list_by_status("queued")
@@ -24,7 +25,7 @@ def list_queued_sessions(
 def claim_queued_session(
     session_id: str,
     payload: QueueClaim,
-    access: WorkspaceAccess = Depends(require_management_access),
+    access: WorkspaceAccess = Depends(require_editor_access),
     db: Session = Depends(get_db),
 ) -> CallSession:
     session_repo = SessionRepository(db, access.workspace_id)
@@ -37,7 +38,15 @@ def claim_queued_session(
     expected_revision = session.revision
     try:
         engine.connect_agent(flow, session, payload.agent_name)
-        return session_repo.save(session, expected_revision=expected_revision)
+        saved = session_repo.save(session, expected_revision=expected_revision)
+        AuditService(db, access.workspace_id).record(
+            actor=access.email or access.user_id or "admin",
+            action="queue.session_claimed",
+            resource_type="session",
+            resource_id=session_id,
+            details={"agent_name": payload.agent_name},
+        )
+        return saved
     except FlowEngineError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except SessionConflictError as exc:

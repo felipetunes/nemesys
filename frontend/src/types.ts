@@ -81,7 +81,7 @@ export interface MetricsSummary {
 export interface WorkspaceInfo {
   id: string
   name: string
-  role: string
+  role: 'viewer' | 'editor' | 'admin' | 'owner'
 }
 
 export interface AuthTokenResponse {

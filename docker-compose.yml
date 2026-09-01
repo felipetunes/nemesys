@@ -5,10 +5,10 @@ services:
     env_file:
       - .env
     environment:
-      DATABASE_URL: sqlite:////app/data/revelys.db
+      DATABASE_URL: sqlite:////app/data/nemesys.db
       CORS_ORIGINS: http://localhost:5173
     volumes:
-      - revelys_data:/app/data
+      - nemesys_data:/app/data
     ports:
       - "8000:8000"
 
@@ -23,4 +23,4 @@ services:
       - "5173:80"
 
 volumes:
-  revelys_data:
+  nemesys_data:

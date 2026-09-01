@@ -1,4 +1,4 @@
-# Continuing Revelys with Codex in VS Code
+# Continuing Nemesys with Codex in VS Code
 
 The repository includes `AGENTS.md`. Keep it in the root so a coding agent can understand the architectural constraints before editing the project.
 

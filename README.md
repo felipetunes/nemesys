@@ -1,22 +1,22 @@
-# Revelys
+# Nemesys
 
-[![CI](https://github.com/felipetunes/revelys/actions/workflows/ci.yml/badge.svg)](https://github.com/felipetunes/revelys/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/felipetunes/revelys)](https://github.com/felipetunes/revelys/releases)
+[![CI](https://github.com/felipetunes/nemesys/actions/workflows/ci.yml/badge.svg)](https://github.com/felipetunes/nemesys/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/felipetunes/nemesys)](https://github.com/felipetunes/nemesys/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-7c5cff.svg)](LICENSE)
 
-**Current project version: `0.4.0` — operations and workspaces**
+**Current project version: `0.5.0` — Nemesys reliability and security**
 
 **A visual, AI-assisted IVR flow builder and runtime for learning, prototyping and portfolio demos.**
 
-![Revelys visual IVR editor](docs/assets/editor-preview.svg)
+![Nemesys visual IVR editor](docs/assets/editor-preview.svg)
 
-Revelys is a full-stack project that lets you design a call flow visually, run it in a browser simulator, inspect every execution event and optionally connect a real phone number through Twilio or a signed generic webhook adapter.
+Nemesys is a full-stack project that lets you design a call flow visually, run it in a browser simulator, inspect every execution event and optionally connect a real phone number through Twilio or a signed generic webhook adapter.
 
 > The repository is intentionally provider-neutral at its core. The included Twilio adapter is only one example of how a telephony provider can drive the same flow engine.
 
 ## Why this project exists
 
-Traditional IVRs are often built inside proprietary platforms. Revelys exposes the core ideas as code:
+Traditional IVRs are often built inside proprietary platforms. Nemesys exposes the core ideas as code:
 
 - graph-based flow design;
 - deterministic runtime state machine;
@@ -37,7 +37,13 @@ Traditional IVRs are often built inside proprietary platforms. Revelys exposes t
 - retention controls and persisted-session metrics;
 - a traceable human-agent queue simulator;
 - browser speech controls and telephony speech-provider contracts;
-- a signed, idempotent generic telephony webhook adapter.
+- a signed, idempotent generic telephony webhook adapter;
+- role-based workspace authorization with viewer, editor, admin and owner levels;
+- workspace-safe identifiers and provider idempotency keys;
+- login lockout, operational request IDs, security headers and readiness probes;
+- persisted audit events for sensitive management operations;
+- timestamped generic webhooks with replay-window enforcement;
+- dependency vulnerability checks in CI and weekly automated update proposals.
 
 ## Demo flow
 
@@ -105,8 +111,8 @@ Start
 ### 1. Clone and configure
 
 ```bash
-git clone https://github.com/felipetunes/revelys.git
-cd revelys
+git clone https://github.com/felipetunes/nemesys.git
+cd nemesys
 cp .env.example .env
 ```
 
@@ -176,6 +182,8 @@ The demo flow accepts both DTMF and speech/free text.
 
 ```text
 GET    /health
+GET    /health/live
+GET    /health/ready
 GET    /api/flows
 GET    /api/flows/{flow_id}
 PUT    /api/flows/{flow_id}
@@ -189,6 +197,10 @@ POST   /api/auth/register
 POST   /api/auth/login
 GET    /api/auth/me
 POST   /api/auth/logout
+GET    /api/workspaces/members
+POST   /api/workspaces/members
+PATCH  /api/workspaces/members/{user_id}
+DELETE /api/workspaces/members/{user_id}
 POST   /api/sessions
 GET    /api/sessions/{session_id}
 POST   /api/sessions/{session_id}/input
@@ -199,13 +211,14 @@ POST   /api/telephony/generic/{session_id}/input
 GET    /api/queue
 POST   /api/queue/{session_id}/claim
 GET    /api/operations/metrics
+GET    /api/operations/audit
 POST   /api/operations/retention/run
 ```
 
 ## Repository structure
 
 ```text
-revelys/
+nemesys/
 ├── backend/
 │   ├── app/
 │   │   ├── api/
@@ -230,13 +243,15 @@ See [`docs/architecture.md`](docs/architecture.md), [`docs/flow-spec.md`](docs/f
 
 Set `AUTH_REQUIRED=true` to require user or admin bearer tokens. The first registered account becomes the owner of a new isolated workspace; later public registration follows `ALLOW_REGISTRATION`. Tokens are revocable and expire according to `AUTH_SESSION_DAYS`. Leave authentication disabled for the fully offline demo.
 
+Workspace roles are enforced server-side: viewers can inspect, editors can modify flows and operate simulations, and admins/owners can manage members, run retention and inspect the audit log. Ownership changes remain owner-only and the last owner cannot be removed. Repeated failed logins are temporarily locked according to `AUTH_MAX_FAILED_ATTEMPTS` and `AUTH_LOCKOUT_MINUTES`.
+
 The editor's **Access** dialog supports registration and login and stores its token only for the current browser tab. `ADMIN_API_KEY` remains available as a bootstrap/operator credential.
 
 ## Production profile
 
 See [`docs/production.md`](docs/production.md) for the PostgreSQL, Redis and Alembic deployment profile.
 
-Each GitHub release publishes versioned public images to `ghcr.io/felipetunes/revelys-backend` and `ghcr.io/felipetunes/revelys-frontend`.
+Each GitHub release publishes versioned public images to `ghcr.io/felipetunes/nemesys-backend` and `ghcr.io/felipetunes/nemesys-frontend`.
 
 ## Roadmap
 

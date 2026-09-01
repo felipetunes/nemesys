@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.5.0 — 2026-09-01
+
+### Added
+
+- Nemesys product identity and repository/package naming.
+- Enforced viewer, editor, admin and owner workspace roles with member-management APIs and last-owner protection.
+- Persisted audit events for flow, session, queue, authentication and retention operations.
+- Login lockout controls, readiness/liveness probes, request IDs and HTTP security headers.
+- Timestamped generic webhook signatures with a configurable anti-replay window.
+- Automated Python/npm vulnerability audits and weekly Dependabot updates.
+
+### Changed
+
+- Flow identifiers, published versions and provider call IDs are now isolated by workspace at the database constraint level.
+- The default SQLite database, Docker volume and PostgreSQL profile use the Nemesys name.
+
 ## 0.4.0 — 2026-09-01
 
 ### Added
@@ -29,7 +45,7 @@
 ### Changed
 
 - Frontend CI now runs lint, tests and the production build.
-- Local database and volume names now use the Revelys identity.
+- Local database and volume names now use the project identity.
 
 ## 0.2.0 — 2026-08-31
 

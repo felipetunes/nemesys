@@ -83,7 +83,7 @@ def build_demo_flow() -> FlowDefinition:
                 label="End",
                 x=1260,
                 y=180,
-                config={"message": "Obrigado por testar a Revelys. Até logo!"},
+                config={"message": "Obrigado por testar a Nemesys. Até logo!"},
             ),
         ],
         edges=[

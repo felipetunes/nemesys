@@ -1,5 +1,6 @@
 import hashlib
 import hmac
+import time
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -32,8 +33,16 @@ class GenericCallInput(StrictModel):
 async def validate_signature(request: Request) -> None:
     if not settings.generic_webhook_secret:
         return
-    signature = request.headers.get("X-Revelys-Signature", "")
-    expected = hmac.new(settings.generic_webhook_secret.encode(), await request.body(), hashlib.sha256).hexdigest()
+    signature = request.headers.get("X-Nemesys-Signature", "")
+    timestamp = request.headers.get("X-Nemesys-Timestamp", "")
+    try:
+        timestamp_value = int(timestamp)
+    except ValueError as exc:
+        raise HTTPException(status_code=403, detail="Missing or invalid webhook timestamp") from exc
+    if abs(int(time.time()) - timestamp_value) > settings.generic_webhook_tolerance_seconds:
+        raise HTTPException(status_code=403, detail="Webhook timestamp is outside the accepted window")
+    signed_payload = timestamp.encode() + b"." + await request.body()
+    expected = hmac.new(settings.generic_webhook_secret.encode(), signed_payload, hashlib.sha256).hexdigest()
     if not hmac.compare_digest(signature, expected):
         raise HTTPException(status_code=403, detail="Invalid generic webhook signature")
 

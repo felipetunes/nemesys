@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for improving Revelys.
+Thanks for improving Nemesys.
 
 ## Setup
 

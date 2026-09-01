@@ -1,6 +1,7 @@
 import secrets
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -11,6 +12,8 @@ from app.core.db import get_db
 from app.services.auth import AuthError, AuthService
 
 bearer = HTTPBearer(auto_error=False)
+RoleRequirement = Literal["viewer", "editor", "admin", "owner"]
+ROLE_RANK: dict[str, int] = {"viewer": 10, "editor": 20, "admin": 30, "owner": 40}
 
 
 @dataclass(frozen=True)
@@ -60,3 +63,20 @@ def require_management_access(
         detail="Invalid or expired API token",
         headers={"WWW-Authenticate": "Bearer"},
     )
+
+
+def require_workspace_role(minimum_role: RoleRequirement) -> Callable[..., WorkspaceAccess]:
+    def dependency(access: WorkspaceAccess = Depends(require_management_access)) -> WorkspaceAccess:
+        if access.is_admin or ROLE_RANK.get(access.role, -1) >= ROLE_RANK[minimum_role]:
+            return access
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Workspace role '{minimum_role}' or higher required",
+        )
+
+    return dependency
+
+
+require_viewer_access = require_workspace_role("viewer")
+require_editor_access = require_workspace_role("editor")
+require_admin_access = require_workspace_role("admin")

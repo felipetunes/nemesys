@@ -1,5 +1,6 @@
 import hashlib
 import hmac
+import time
 
 import httpx
 import pytest
@@ -11,6 +12,7 @@ from app.core.db import Base, get_db
 from app.demo_flow import build_demo_flow
 from app.main import app
 from app.models import SessionRow
+from app.services.auth import AuthService
 from app.services.flow_repository import FlowRepository
 from app.telephony import generic_adapter
 
@@ -213,7 +215,7 @@ async def test_user_authentication_scopes_flows_to_workspace(api_client, monkeyp
             "X-Workspace-ID": token_payload["workspaces"][0]["id"],
         }
         workspace_flows = await client.get("/api/flows", headers=headers)
-        isolated_default = await client.get("/api/flows/demo-commerce", headers=headers)
+        workspace_flow_by_id = await client.get("/api/flows/demo-commerce", headers=headers)
         logged_in = await client.post(
             "/api/auth/login",
             json={"email": "owner@example.com", "password": "correct horse battery staple"},
@@ -234,8 +236,9 @@ async def test_user_authentication_scopes_flows_to_workspace(api_client, monkeyp
     assert blocked.status_code == 401
     assert registered.status_code == 201
     assert len(workspace_flows.json()) == 1
-    assert workspace_flows.json()[0]["id"].startswith("demo-")
-    assert isolated_default.status_code == 404
+    assert workspace_flows.json()[0]["id"] == "demo-commerce"
+    assert workspace_flow_by_id.status_code == 200
+    assert workspace_flow_by_id.json()["name"] == "Example Support Demo IVR"
     assert logged_in.status_code == 200
     assert second_registration.status_code == 403
     assert logged_out.status_code == 204
@@ -267,21 +270,129 @@ async def test_generic_telephony_adapter_is_idempotent(api_client):
 async def test_generic_telephony_adapter_validates_signature(api_client):
     client, _ = api_client
     body = b'{"provider_call_id":"signed-call","flow_id":"demo-commerce"}'
-    signature = hmac.new(b"test-webhook-secret", body, hashlib.sha256).hexdigest()
+    timestamp = str(int(time.time()))
+    signature = hmac.new(b"test-webhook-secret", timestamp.encode() + b"." + body, hashlib.sha256).hexdigest()
     generic_adapter.settings.generic_webhook_secret = "test-webhook-secret"
     try:
         rejected = await client.post(
             "/api/telephony/generic/start",
             content=body,
-            headers={"Content-Type": "application/json", "X-Revelys-Signature": "invalid"},
+            headers={
+                "Content-Type": "application/json",
+                "X-Nemesys-Timestamp": timestamp,
+                "X-Nemesys-Signature": "invalid",
+            },
+        )
+        stale_timestamp = str(int(time.time()) - generic_adapter.settings.generic_webhook_tolerance_seconds - 1)
+        stale_signature = hmac.new(
+            b"test-webhook-secret",
+            stale_timestamp.encode() + b"." + body,
+            hashlib.sha256,
+        ).hexdigest()
+        stale = await client.post(
+            "/api/telephony/generic/start",
+            content=body,
+            headers={
+                "Content-Type": "application/json",
+                "X-Nemesys-Timestamp": stale_timestamp,
+                "X-Nemesys-Signature": stale_signature,
+            },
         )
         accepted = await client.post(
             "/api/telephony/generic/start",
             content=body,
-            headers={"Content-Type": "application/json", "X-Revelys-Signature": signature},
+            headers={
+                "Content-Type": "application/json",
+                "X-Nemesys-Timestamp": timestamp,
+                "X-Nemesys-Signature": signature,
+            },
         )
     finally:
         generic_adapter.settings.generic_webhook_secret = None
 
     assert rejected.status_code == 403
+    assert stale.status_code == 403
     assert accepted.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_workspace_roles_and_audit_log_are_enforced(api_client, monkeypatch):
+    client, db_factory = api_client
+    monkeypatch.setenv("AUTH_REQUIRED", "true")
+    get_settings.cache_clear()
+    try:
+        owner_registration = await client.post(
+            "/api/auth/register",
+            json={
+                "email": "rbac-owner@example.com",
+                "password": "correct horse battery staple",
+                "workspace_name": "RBAC Support",
+            },
+        )
+        owner_payload = owner_registration.json()
+        workspace_id = owner_payload["workspaces"][0]["id"]
+        owner_headers = {
+            "Authorization": f"Bearer {owner_payload['token']}",
+            "X-Workspace-ID": workspace_id,
+        }
+        with db_factory() as db:
+            viewer = AuthService(db).register(
+                "viewer@example.com",
+                "another correct horse password",
+                "Viewer Home",
+                7,
+            )
+        added_member = await client.post(
+            "/api/workspaces/members",
+            json={"email": "viewer@example.com", "role": "viewer"},
+            headers=owner_headers,
+        )
+        viewer_headers = {
+            "Authorization": f"Bearer {viewer.token}",
+            "X-Workspace-ID": workspace_id,
+        }
+
+        readable = await client.get("/api/flows", headers=viewer_headers)
+        draft = (await client.get("/api/flows/demo-commerce", headers=owner_headers)).json()
+        forbidden_write = await client.put("/api/flows/demo-commerce", json=draft, headers=viewer_headers)
+        promoted = await client.patch(
+            f"/api/workspaces/members/{viewer.user_id}",
+            json={"role": "editor"},
+            headers=owner_headers,
+        )
+        editor_write = await client.put("/api/flows/demo-commerce", json=draft, headers=viewer_headers)
+        owner_write = await client.put("/api/flows/demo-commerce", json=draft, headers=owner_headers)
+        last_owner_delete = await client.delete(
+            f"/api/workspaces/members/{owner_payload['user_id']}",
+            headers=owner_headers,
+        )
+        forbidden_audit = await client.get("/api/operations/audit", headers=viewer_headers)
+        audit = await client.get("/api/operations/audit", headers=owner_headers)
+    finally:
+        get_settings.cache_clear()
+
+    assert owner_registration.status_code == 201
+    assert added_member.status_code == 201
+    assert readable.status_code == 200
+    assert forbidden_write.status_code == 403
+    assert promoted.status_code == 200
+    assert promoted.json()["role"] == "editor"
+    assert editor_write.status_code == 200
+    assert owner_write.status_code == 200
+    assert last_owner_delete.status_code == 409
+    assert forbidden_audit.status_code == 403
+    assert audit.status_code == 200
+    assert any(event["action"] == "flow.saved" for event in audit.json())
+
+
+@pytest.mark.anyio
+async def test_health_endpoints_and_security_headers(api_client):
+    client, _ = api_client
+
+    response = await client.get("/health/ready", headers={"X-Request-ID": "test-request-123"})
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ready", "version": "0.5.0"}
+    assert response.headers["x-request-id"] == "test-request-123"
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["x-frame-options"] == "DENY"

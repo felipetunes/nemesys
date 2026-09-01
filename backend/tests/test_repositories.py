@@ -124,3 +124,32 @@ def test_provider_call_lookup_supports_idempotency(db_factory):
     assert found is not None
     assert found.id == created.id
     assert duplicate.id == created.id
+
+
+def test_flow_and_provider_identifiers_are_isolated_by_workspace(db_factory):
+    engine = FlowEngine()
+    with db_factory() as db:
+        first_flow_repo = FlowRepository(db, "workspace-one")
+        second_flow_repo = FlowRepository(db, "workspace-two")
+        first_flow_repo.save(build_demo_flow().model_copy(update={"name": "First workspace"}))
+        second_flow_repo.save(build_demo_flow().model_copy(update={"name": "Second workspace"}))
+        first_flow = first_flow_repo.publish("demo-commerce")
+        second_flow = second_flow_repo.publish("demo-commerce")
+        assert first_flow is not None
+        assert second_flow is not None
+
+        first_session = SessionRepository(db, "workspace-one").create(
+            engine.create_session(first_flow),
+            provider="generic",
+            provider_call_id="shared-provider-id",
+        )
+        second_session = SessionRepository(db, "workspace-two").create(
+            engine.create_session(second_flow),
+            provider="generic",
+            provider_call_id="shared-provider-id",
+        )
+
+    assert first_flow.name == "First workspace"
+    assert second_flow.name == "Second workspace"
+    assert first_flow.version == second_flow.version == 1
+    assert first_session.id != second_session.id

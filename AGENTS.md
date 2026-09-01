@@ -1,4 +1,4 @@
-# AGENTS.md — Revelys
+# AGENTS.md — Nemesys
 
 This repository is designed to be continued with coding agents such as Codex.
 
@@ -45,8 +45,8 @@ npm run check
 
 ## Useful next milestones
 
-- composite flow identifiers for unrestricted cross-workspace naming;
 - Redis-backed distributed queue workers;
 - production speech providers and additional carrier adapters;
-- structured logs, OpenTelemetry and alerting;
+- OpenTelemetry export and alerting;
+- backup/restore automation and key rotation;
 - public demo deployment and end-to-end browser tests.

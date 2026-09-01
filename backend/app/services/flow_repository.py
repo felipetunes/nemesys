@@ -9,10 +9,6 @@ from sqlalchemy.orm import Session
 from app.models import FlowDefinition, FlowRow, FlowVersionRow
 
 
-class FlowIdentifierConflictError(RuntimeError):
-    pass
-
-
 class FlowRepository:
     def __init__(self, db: Session, workspace_id: str = "default"):
         self.db = db
@@ -33,9 +29,7 @@ class FlowRepository:
     def save(self, flow: FlowDefinition) -> FlowDefinition:
         now = datetime.now(UTC)
         payload = flow.model_copy(update={"updated_at": now, "version": None, "published_at": None})
-        row = self.db.get(FlowRow, flow.id)
-        if row is not None and row.workspace_id != self.workspace_id:
-            raise FlowIdentifierConflictError("Flow identifier is already in use")
+        row = self.db.get(FlowRow, (self.workspace_id, flow.id))
         if row is None:
             row = FlowRow(
                 id=flow.id,
@@ -58,7 +52,12 @@ class FlowRepository:
         draft = self.get(flow_id)
         if draft is None:
             return None
-        latest = self.db.scalar(select(func.max(FlowVersionRow.version)).where(FlowVersionRow.flow_id == flow_id))
+        latest = self.db.scalar(
+            select(func.max(FlowVersionRow.version)).where(
+                FlowVersionRow.flow_id == flow_id,
+                FlowVersionRow.workspace_id == self.workspace_id,
+            )
+        )
         version = (latest or 0) + 1
         published_at = datetime.now(UTC)
         payload = draft.model_copy(update={"version": version, "published_at": published_at})

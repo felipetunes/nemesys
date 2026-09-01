@@ -16,7 +16,7 @@ Configure the incoming voice URL as:
 POST https://YOUR_PUBLIC_HOST/api/telephony/twilio/voice
 ```
 
-The adapter creates a normal Revelys session, renders prompts as TwiML `<Say>`, and converts speech/DTMF `<Gather>` results into the same `submit_input` operation used by the browser simulator.
+The adapter creates a normal Nemesys session, renders prompts as TwiML `<Say>`, and converts speech/DTMF `<Gather>` results into the same `submit_input` operation used by the browser simulator.
 
 The provider call ID is stored with a uniqueness constraint. A repeated incoming webhook returns the existing session instead of creating a duplicate call.
 
@@ -42,7 +42,7 @@ POST /api/telephony/generic/{session_id}/input
 
 `start` accepts `provider_call_id`, `flow_id` and optional initial variables. Repeating the same provider call ID returns the existing session. `input` accepts the same provider call ID plus a text or DTMF value.
 
-When `GENERIC_WEBHOOK_SECRET` is set, send `X-Revelys-Signature` containing the lowercase hexadecimal HMAC-SHA256 digest of the raw request body.
+When `GENERIC_WEBHOOK_SECRET` is set, send `X-Nemesys-Timestamp` with the current Unix timestamp and `X-Nemesys-Signature` with the lowercase hexadecimal HMAC-SHA256 digest of `<timestamp>.<raw-body>`. Requests outside `GENERIC_WEBHOOK_TOLERANCE_SECONDS` are rejected to limit replay attacks.
 
 The generic adapter and Twilio adapter both use the same session repository and `FlowEngine`. Speech rendering/recognition is exposed through a protocol in `app/telephony/speech.py`; provider-specific behavior remains under `app/telephony/`.
 

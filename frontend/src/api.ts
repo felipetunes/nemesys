@@ -3,8 +3,8 @@ import type { AuthTokenResponse, CallSession, FlowDefinition, FlowValidationResu
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const managementToken = window.sessionStorage.getItem('revelys_management_token')
-  const workspaceId = window.sessionStorage.getItem('revelys_workspace_id')
+  const managementToken = window.sessionStorage.getItem('nemesys_management_token')
+  const workspaceId = window.sessionStorage.getItem('nemesys_workspace_id')
   const response = await fetch(`${API}${path}`, {
     ...init,
     headers: {
@@ -16,7 +16,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   })
   if (!response.ok) {
     const body = await response.text()
-    throw new Error(body || `${response.status} ${response.statusText}`)
+    let message = body || `${response.status} ${response.statusText}`
+    try {
+      const parsed = JSON.parse(body) as { detail?: unknown }
+      if (typeof parsed.detail === 'string') message = parsed.detail
+    } catch {
+      // Preserve the original response text when it is not JSON.
+    }
+    const requestId = response.headers.get('X-Request-ID')
+    throw new Error(requestId ? `${message} (request ${requestId})` : message)
   }
   return response.json() as Promise<T>
 }

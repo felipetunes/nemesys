@@ -26,8 +26,8 @@ export default function AccessDialog({ configured, onClose, onAuthenticated, onC
         : await api.register(email, password, workspaceName)
       const workspace = result.workspaces[0]
       if (!workspace) throw new Error('The account has no workspace membership.')
-      window.sessionStorage.setItem('revelys_management_token', result.token)
-      window.sessionStorage.setItem('revelys_workspace_id', workspace.id)
+      window.sessionStorage.setItem('nemesys_management_token', result.token)
+      window.sessionStorage.setItem('nemesys_workspace_id', workspace.id)
       onAuthenticated()
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason))

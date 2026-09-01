@@ -3,10 +3,11 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from app.core.auth import WorkspaceAccess, require_management_access
+from app.core.auth import WorkspaceAccess, require_editor_access, require_viewer_access
 from app.core.db import get_db
 from app.models import FlowDefinition
-from app.services.flow_repository import FlowIdentifierConflictError, FlowRepository
+from app.services.audit import AuditService
+from app.services.flow_repository import FlowRepository
 from app.services.flow_validator import FlowValidationResult, validate_flow
 
 router = APIRouter(prefix="/api/flows", tags=["flows"])
@@ -14,7 +15,7 @@ router = APIRouter(prefix="/api/flows", tags=["flows"])
 
 @router.get("", response_model=list[FlowDefinition])
 def list_flows(
-    access: WorkspaceAccess = Depends(require_management_access),
+    access: WorkspaceAccess = Depends(require_viewer_access),
     db: Session = Depends(get_db),
 ) -> list[FlowDefinition]:
     return FlowRepository(db, access.workspace_id).list_drafts()
@@ -23,7 +24,7 @@ def list_flows(
 @router.get("/{flow_id}", response_model=FlowDefinition)
 def get_flow(
     flow_id: str,
-    access: WorkspaceAccess = Depends(require_management_access),
+    access: WorkspaceAccess = Depends(require_viewer_access),
     db: Session = Depends(get_db),
 ) -> FlowDefinition:
     flow = FlowRepository(db, access.workspace_id).get(flow_id)
@@ -35,7 +36,7 @@ def get_flow(
 @router.post("/actions/validate", response_model=FlowValidationResult)
 def validate_flow_definition(
     flow: FlowDefinition,
-    _: WorkspaceAccess = Depends(require_management_access),
+    _: WorkspaceAccess = Depends(require_viewer_access),
 ) -> FlowValidationResult:
     return validate_flow(flow)
 
@@ -44,7 +45,7 @@ def validate_flow_definition(
 def import_flow_definition(
     flow: FlowDefinition,
     overwrite: bool = Query(default=False),
-    access: WorkspaceAccess = Depends(require_management_access),
+    access: WorkspaceAccess = Depends(require_editor_access),
     db: Session = Depends(get_db),
 ) -> FlowDefinition:
     repo = FlowRepository(db, access.workspace_id)
@@ -56,16 +57,21 @@ def import_flow_definition(
             status_code=422,
             detail={"message": "Flow validation failed", "errors": [issue.model_dump() for issue in validation.errors]},
         )
-    try:
-        return repo.save(flow)
-    except FlowIdentifierConflictError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    saved = repo.save(flow)
+    AuditService(db, access.workspace_id).record(
+        actor=access.email or access.user_id or "admin",
+        action="flow.imported",
+        resource_type="flow",
+        resource_id=flow.id,
+        details={"overwrite": overwrite},
+    )
+    return saved
 
 
 @router.get("/{flow_id}/export")
 def export_flow_definition(
     flow_id: str,
-    access: WorkspaceAccess = Depends(require_management_access),
+    access: WorkspaceAccess = Depends(require_viewer_access),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
     flow = FlowRepository(db, access.workspace_id).get(flow_id)
@@ -81,7 +87,7 @@ def export_flow_definition(
 @router.get("/{flow_id}/versions", response_model=list[FlowDefinition])
 def list_flow_versions(
     flow_id: str,
-    access: WorkspaceAccess = Depends(require_management_access),
+    access: WorkspaceAccess = Depends(require_viewer_access),
     db: Session = Depends(get_db),
 ) -> list[FlowDefinition]:
     repo = FlowRepository(db, access.workspace_id)
@@ -94,7 +100,7 @@ def list_flow_versions(
 def get_flow_version(
     flow_id: str,
     version: int,
-    access: WorkspaceAccess = Depends(require_management_access),
+    access: WorkspaceAccess = Depends(require_viewer_access),
     db: Session = Depends(get_db),
 ) -> FlowDefinition:
     flow = FlowRepository(db, access.workspace_id).get_version(flow_id, version)
@@ -106,7 +112,7 @@ def get_flow_version(
 @router.post("/{flow_id}/publish", response_model=FlowDefinition)
 def publish_flow(
     flow_id: str,
-    access: WorkspaceAccess = Depends(require_management_access),
+    access: WorkspaceAccess = Depends(require_editor_access),
     db: Session = Depends(get_db),
 ) -> FlowDefinition:
     repo = FlowRepository(db, access.workspace_id)
@@ -122,6 +128,13 @@ def publish_flow(
     published = repo.publish(flow_id)
     if published is None:
         raise HTTPException(status_code=404, detail="Flow not found")
+    AuditService(db, access.workspace_id).record(
+        actor=access.email or access.user_id or "admin",
+        action="flow.published",
+        resource_type="flow",
+        resource_id=flow_id,
+        details={"version": published.version},
+    )
     return published
 
 
@@ -129,7 +142,7 @@ def publish_flow(
 def save_flow(
     flow_id: str,
     flow: FlowDefinition,
-    access: WorkspaceAccess = Depends(require_management_access),
+    access: WorkspaceAccess = Depends(require_editor_access),
     db: Session = Depends(get_db),
 ) -> FlowDefinition:
     if flow.id != flow_id:
@@ -140,7 +153,11 @@ def save_flow(
             status_code=422,
             detail={"message": "Flow validation failed", "errors": [x.model_dump() for x in validation.errors]},
         )
-    try:
-        return FlowRepository(db, access.workspace_id).save(flow)
-    except FlowIdentifierConflictError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    saved = FlowRepository(db, access.workspace_id).save(flow)
+    AuditService(db, access.workspace_id).record(
+        actor=access.email or access.user_id or "admin",
+        action="flow.saved",
+        resource_type="flow",
+        resource_id=flow_id,
+    )
+    return saved

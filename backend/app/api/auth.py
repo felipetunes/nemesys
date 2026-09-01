@@ -3,11 +3,12 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
-from app.core.auth import WorkspaceAccess, require_management_access
+from app.core.auth import WorkspaceAccess, require_viewer_access
 from app.core.config import get_settings
 from app.core.db import get_db
 from app.demo_flow import build_demo_flow
 from app.models import AuthMe, AuthTokenResponse, LoginRequest, RegisterRequest, WorkspaceInfo
+from app.services.audit import AuditService
 from app.services.auth import AuthError, AuthService
 from app.services.flow_repository import FlowRepository
 
@@ -25,26 +26,45 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)) -> AuthTok
     except AuthError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     workspace_id = token.workspaces[0].id
-    demo = build_demo_flow().model_copy(
-        update={"id": f"demo-{workspace_id[:8]}", "name": f"{payload.workspace_name.strip()} Demo IVR"}
-    )
+    demo = build_demo_flow().model_copy(update={"name": f"{payload.workspace_name.strip()} Demo IVR"})
     repo = FlowRepository(db, workspace_id)
     repo.save(demo)
     repo.publish(demo.id)
+    AuditService(db, workspace_id).record(
+        actor=token.email,
+        action="workspace.registered",
+        resource_type="workspace",
+        resource_id=workspace_id,
+    )
     return token
 
 
 @router.post("/login", response_model=AuthTokenResponse)
 def login(payload: LoginRequest, db: Session = Depends(get_db)) -> AuthTokenResponse:
+    settings = get_settings()
     try:
-        return AuthService(db).login(payload.email, payload.password, get_settings().auth_session_days)
+        token = AuthService(db).login(
+            payload.email,
+            payload.password,
+            settings.auth_session_days,
+            settings.auth_max_failed_attempts,
+            settings.auth_lockout_minutes,
+        )
     except AuthError as exc:
         raise HTTPException(status_code=401, detail=str(exc), headers={"WWW-Authenticate": "Bearer"}) from exc
+    for workspace in token.workspaces:
+        AuditService(db, workspace.id).record(
+            actor=token.email,
+            action="auth.login",
+            resource_type="user",
+            resource_id=token.user_id,
+        )
+    return token
 
 
 @router.get("/me", response_model=AuthMe)
 def me(
-    access: WorkspaceAccess = Depends(require_management_access),
+    access: WorkspaceAccess = Depends(require_viewer_access),
     db: Session = Depends(get_db),
 ) -> AuthMe:
     if access.user_id is None:
@@ -65,9 +85,15 @@ def me(
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 def logout(
     authorization: Annotated[str | None, Header(alias="Authorization")] = None,
-    access: WorkspaceAccess = Depends(require_management_access),
+    access: WorkspaceAccess = Depends(require_viewer_access),
     db: Session = Depends(get_db),
 ) -> Response:
     if authorization and authorization.lower().startswith("bearer ") and not access.is_admin:
+        AuditService(db, access.workspace_id).record(
+            actor=access.email or access.user_id or "unknown",
+            action="auth.logout",
+            resource_type="user",
+            resource_id=access.user_id,
+        )
         AuthService(db).revoke_token(authorization[7:].strip())
     return Response(status_code=status.HTTP_204_NO_CONTENT)
