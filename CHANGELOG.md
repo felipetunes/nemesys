@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.12.0 — 2026-09-01
+
+### Added
+
+- IVR search by name, description or ID, with recent/name sorting and a dedicated no-results state.
+- Visible editor shortcuts for saving a draft and saving before browser testing.
+- Customer-focused simulator mode with technical execution details available on demand.
+
+### Changed
+
+- The editor palette now presents the four essential journey nodes first and progressively reveals AI, decision, data and outcome nodes.
+- Catalog controls adapt to narrow screens while preserving active and archived lifecycle filters.
+
 ## 0.11.0 — 2026-09-01
 
 ### Added

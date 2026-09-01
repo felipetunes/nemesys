@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Bot, CheckCircle2, CircleDot, Headset, Mic, PhoneCall, RotateCcw, Send, Terminal, UserRound, Volume2, XCircle } from 'lucide-react'
+import { Bot, CheckCircle2, CircleDot, Code2, EyeOff, Headset, Mic, PhoneCall, RotateCcw, Send, Terminal, UserRound, Volume2, XCircle } from 'lucide-react'
 import { api } from '../api'
 import { useI18n, type TranslationKey } from '../i18n'
 import { BrowserSpeechProvider } from '../speech'
@@ -43,6 +43,7 @@ export default function Simulator({ flow }: Props) {
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
   const [listening, setListening] = useState(false)
+  const [showTechnical, setShowTechnical] = useState(false)
   const [error, setError] = useState('')
   const speech = useMemo(() => new BrowserSpeechProvider(), [])
 
@@ -73,7 +74,12 @@ export default function Simulator({ flow }: Props) {
   }
 
   return (
-    <div className="sim-grid">
+    <div className="simulator-page">
+      <header className="simulator-heading">
+        <div><span className="eyebrow">ARCHITECT</span><h1>{t('simulator.pageTitle')}</h1><p>{t('simulator.pageDescription')}</p></div>
+        <button className="secondary-btn" aria-expanded={showTechnical} onClick={() => setShowTechnical(current => !current)}>{showTechnical ? <EyeOff size={16} /> : <Code2 size={16} />}{t(showTechnical ? 'simulator.hideTechnical' : 'simulator.showTechnical')}</button>
+      </header>
+      <div className={`sim-grid${showTechnical ? '' : ' sim-grid--focused'}`}>
       <section className="phone panel">
         <div className="phone-head"><PhoneCall size={18} /><div><strong>{t('simulator.title')}</strong><span>{session ? session.id.slice(0, 8) : t('simulator.noSession')}</span></div>{session?.last_prompt && speech.canSpeak && <button className="voice-btn" title={t('simulator.speakPrompt')} aria-label={t('simulator.speakPrompt')} onClick={() => speech.speak(session.last_prompt || '', language)}><Volume2 size={15} /></button>}<span className={`status status--${session?.status || 'idle'}`}>{t(statusLabelKeys[session?.status || 'idle'])}</span></div>
         {!session && <div className="sim-hero"><div className="sim-hero__orb"><PhoneCall size={34} /></div><h2>{t('simulator.heroTitle')}</h2><p>{t('simulator.heroDescription')}</p><button className="primary-btn large" onClick={start} disabled={busy}><PhoneCall size={17} />{t('simulator.start')}</button></div>}
@@ -96,7 +102,7 @@ export default function Simulator({ flow }: Props) {
         {error && <div className="error-box">{error}</div>}
       </section>
 
-      <section className="trace panel">
+      {showTechnical && <section className="trace panel">
         <div className="trace-head"><Terminal size={17} /><div><strong>{t('simulator.trace')}</strong><span>{t('simulator.traceDescription')}</span></div></div>
         {!session && <div className="empty-state">{t('simulator.traceEmpty')}</div>}
         {session && <div className="trace-list">{session.trace.map(event => <div key={event.seq} className="trace-row">
@@ -104,7 +110,8 @@ export default function Simulator({ flow }: Props) {
           <div><strong>{event.type}</strong><p>{event.message}</p>{event.node_id && <code>{event.node_id}</code>}</div>
         </div>)}</div>}
         {session && <div className="vars"><strong>{t('simulator.variables')}</strong><pre>{JSON.stringify(session.variables, null, 2)}</pre></div>}
-      </section>
+      </section>}
+      </div>
     </div>
   )
 }

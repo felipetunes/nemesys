@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent as ReactDragEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent as ReactDragEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import {
   addEdge,
   Background,
@@ -11,7 +11,7 @@ import {
   type Edge,
   type Node,
 } from '@xyflow/react'
-import { Bot, CircleStop, Download, FileUp, Flag, GitBranch, Headphones, MessageSquareText, MousePointerClick, Play, PlayCircle, Plus, Save, Trash2, UploadCloud, Variable } from 'lucide-react'
+import { Bot, ChevronDown, CircleStop, Download, FileUp, Flag, GitBranch, Headphones, MessageSquareText, MousePointerClick, Play, PlayCircle, Plus, Save, Sparkles, Trash2, UploadCloud, Variable } from 'lucide-react'
 import { useI18n, type TranslationKey } from '../i18n'
 import IvrNode from './IvrNode'
 import type { FlowDefinition, FlowNode, NodeKind } from '../types'
@@ -41,11 +41,8 @@ const palette: { type: NodeKind; icon: typeof Play }[] = [
   { type: 'end', icon: CircleStop },
 ]
 
-const paletteGroups: { label: TranslationKey; types: NodeKind[] }[] = [
-  { label: 'flow.groupConversation', types: ['prompt', 'collect_input', 'ai_intent'] },
-  { label: 'flow.groupLogic', types: ['decision', 'set_variable'] },
-  { label: 'flow.groupResolution', types: ['set_outcome', 'queue', 'end'] },
-]
+const essentialNodeTypes: NodeKind[] = ['prompt', 'collect_input', 'queue', 'end']
+const advancedNodeTypes: NodeKind[] = ['ai_intent', 'decision', 'set_variable', 'set_outcome']
 
 const nodeLabelKeys: Record<NodeKind, TranslationKey> = {
   start: 'node.start',
@@ -83,6 +80,7 @@ export default function FlowEditor({ flow, onSave, onPublish, onExport, onImport
   )
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
+  const [showAdvanced, setShowAdvanced] = useState(false)
   const [dirty, setDirty] = useState(false)
   const importInput = useRef<HTMLInputElement>(null)
   const [toFlowPosition, setToFlowPosition] = useState<((position: { x: number; y: number }) => { x: number; y: number }) | null>(null)
@@ -231,20 +229,43 @@ export default function FlowEditor({ flow, onSave, onPublish, onExport, onImport
     }
   }
 
+  const handleEditorKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const modifier = event.ctrlKey || event.metaKey
+    if (modifier && event.key.toLowerCase() === 's') {
+      event.preventDefault()
+      void saveDraft()
+      return
+    }
+    if (modifier && event.key === 'Enter') {
+      event.preventDefault()
+      void saveAndTest()
+      return
+    }
+    const target = event.target as HTMLElement
+    if ((event.key === 'Delete' || event.key === 'Backspace') && !['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) && (selectedId || selectedEdgeId)) {
+      event.preventDefault()
+      deleteSelection()
+    }
+  }
+
+  const renderPaletteButton = (type: NodeKind) => {
+    const item = palette.find(candidate => candidate.type === type)!
+    const Icon = item.icon
+    return <button key={item.type} className="palette-btn" title={t(nodeDescriptionKeys[item.type])} draggable onDragStart={event => { event.dataTransfer.setData('application/nemesys-node-kind', item.type); event.dataTransfer.effectAllowed = 'copy' }} onClick={() => addNode(item.type)}><Icon size={16} /><span>{t(nodeLabelKeys[item.type])}</span></button>
+  }
+
   return (
-    <div className="editor-layout">
+    <div className="editor-layout" onKeyDown={handleEditorKeyDown}>
       <aside className="palette panel">
         <div className="section-title"><Plus size={15} /> {t('flow.nodes')}</div>
         <p className="palette-instruction">{t('flow.paletteInstruction')}</p>
-        {paletteGroups.map(group => <div className="palette-group" key={group.label}>
-          <span>{t(group.label)}</span>
-          {group.types.map(type => {
-            const item = palette.find(candidate => candidate.type === type)!
-            const Icon = item.icon
-            return <button key={item.type} className="palette-btn" title={t(nodeDescriptionKeys[item.type])} draggable onDragStart={event => { event.dataTransfer.setData('application/nemesys-node-kind', item.type); event.dataTransfer.effectAllowed = 'copy' }} onClick={() => addNode(item.type)}><Icon size={16} /><span>{t(nodeLabelKeys[item.type])}</span></button>
-          })}
-        </div>)}
+        <div className="palette-group"><span>{t('flow.groupEssential')}</span>{essentialNodeTypes.map(renderPaletteButton)}</div>
+        <div className={`palette-advanced${showAdvanced ? ' open' : ''}`}>
+          <button className="palette-advanced-toggle" aria-expanded={showAdvanced} onClick={() => setShowAdvanced(current => !current)}><Sparkles size={14} /><span><strong>{t('flow.groupAdvanced')}</strong><small>{t('flow.groupAdvancedDescription')}</small></span><ChevronDown size={14} /></button>
+          {showAdvanced && <div className="palette-group">{advancedNodeTypes.map(renderPaletteButton)}</div>}
+        </div>
         <div className="palette-note"><Play size={14} /> {t('flow.paletteNote')}</div>
+        <div className="editor-shortcuts"><span>{t('flow.shortcuts')}</span><div><kbd>Ctrl</kbd><kbd>S</kbd>{t('flow.shortcutSave')}</div><div><kbd>Ctrl</kbd><kbd>Enter</kbd>{t('flow.shortcutTest')}</div></div>
       </aside>
 
       <section className="canvas panel">
@@ -264,8 +285,8 @@ export default function FlowEditor({ flow, onSave, onPublish, onExport, onImport
             />
             <button className="secondary-btn toolbar-file-action" title={t('flow.import')} disabled={saving || publishing || importing} onClick={() => importInput.current?.click()}><FileUp size={16} /><span className="button-label">{t('flow.importShort')}</span></button>
             <button className="secondary-btn toolbar-file-action" title={t('flow.export')} disabled={saving || publishing || importing} onClick={() => onExport(buildFlow())}><Download size={16} /><span className="button-label">{t('flow.exportShort')}</span></button>
-            <button className="secondary-btn" disabled={saving || publishing || importing} onClick={() => void saveDraft()}><Save size={16} />{saving ? t('flow.saving') : t('flow.saveDraft')}</button>
-            <button className="secondary-btn guided-action" disabled={saving || publishing || importing} onClick={() => void saveAndTest()}><PlayCircle size={16} />{t('flow.saveAndTest')}</button>
+            <button className="secondary-btn" title={t('flow.shortcutSaveTitle')} disabled={saving || publishing || importing} onClick={() => void saveDraft()}><Save size={16} />{saving ? t('flow.saving') : t('flow.saveDraft')}</button>
+            <button className="secondary-btn guided-action" title={t('flow.shortcutTestTitle')} disabled={saving || publishing || importing} onClick={() => void saveAndTest()}><PlayCircle size={16} />{t('flow.saveAndTest')}</button>
             <button className="primary-btn" disabled={saving || publishing || importing} onClick={() => void publishFlow()}><UploadCloud size={16} />{publishing ? t('flow.publishing') : t('flow.publish')}</button>
           </div>
         </div>

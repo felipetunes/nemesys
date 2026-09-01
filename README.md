@@ -4,7 +4,7 @@
 [![Release](https://img.shields.io/github/v/release/felipetunes/nemesys)](https://github.com/felipetunes/nemesys/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-7c5cff.svg)](LICENSE)
 
-**Current project version: `0.11.0` — guided onboarding and usability**
+**Current project version: `0.12.0` — focused workflows and scalable navigation**
 
 **A visual, AI-assisted IVR flow builder and runtime for learning, prototyping and portfolio demos.**
 
@@ -62,7 +62,11 @@ Traditional IVRs are often built inside proprietary platforms. Nemesys exposes t
 - actionable agent guidance with one-click queue entry and clear next-step messaging;
 - progressive user-creation disclosure and plain-language role descriptions;
 - consistent keyboard focus and a skip-to-content shortcut for accessible navigation;
-- lazy-loaded visual editor for a substantially smaller initial application bundle.
+- lazy-loaded visual editor for a substantially smaller initial application bundle;
+- searchable and sortable IVR catalog for growing workspaces;
+- progressive editor palette that presents essential nodes before advanced logic and data nodes;
+- visible editor keyboard shortcuts for saving and testing;
+- customer-first simulator with execution traces and session variables available on demand.
 
 ## Product areas and languages
 

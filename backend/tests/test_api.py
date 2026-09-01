@@ -581,7 +581,7 @@ async def test_health_endpoints_and_security_headers(api_client):
     response = await client.get("/health/ready", headers={"X-Request-ID": "test-request-123"})
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ready", "version": "0.11.0"}
+    assert response.json() == {"status": "ready", "version": "0.12.0"}
     assert response.headers["x-request-id"] == "test-request-123"
     assert response.headers["x-content-type-options"] == "nosniff"
     assert response.headers["x-frame-options"] == "DENY"

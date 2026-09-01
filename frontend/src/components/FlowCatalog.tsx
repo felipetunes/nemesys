@@ -1,5 +1,5 @@
 import { useMemo, useState, type FormEvent } from 'react'
-import { Archive, ArrowRight, Clock3, Copy, GitBranch, History, Layers3, Plus, RotateCcw, Trash2, Workflow, X } from 'lucide-react'
+import { Archive, ArrowRight, ArrowUpDown, Clock3, Copy, GitBranch, History, Layers3, Plus, RotateCcw, Search, Trash2, Workflow, X } from 'lucide-react'
 import { useI18n } from '../i18n'
 import type { FlowDefinition } from '../types'
 
@@ -33,14 +33,22 @@ export default function FlowCatalog({
   const { language, t } = useI18n()
   const [showCreate, setShowCreate] = useState(false)
   const [view, setView] = useState<'active' | 'archived'>('active')
+  const [query, setQuery] = useState('')
+  const [sort, setSort] = useState<'updated' | 'name'>('updated')
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const activeFlows = useMemo(() => flows.filter(flow => !flow.archived_at), [flows])
   const archivedFlows = useMemo(() => flows.filter(flow => Boolean(flow.archived_at)), [flows])
-  const visibleFlows = useMemo(
-    () => [...(view === 'active' ? activeFlows : archivedFlows)].sort((a, b) => a.name.localeCompare(b.name, language)),
-    [activeFlows, archivedFlows, language, view],
-  )
+  const viewFlows = view === 'active' ? activeFlows : archivedFlows
+  const visibleFlows = useMemo(() => {
+    const normalizedQuery = query.trim().toLocaleLowerCase(language)
+    const matches = normalizedQuery
+      ? viewFlows.filter(flow => [flow.name, flow.description, flow.id].some(value => value.toLocaleLowerCase(language).includes(normalizedQuery)))
+      : [...viewFlows]
+    return matches.sort((a, b) => sort === 'name'
+      ? a.name.localeCompare(b.name, language)
+      : new Date(b.updated_at || b.archived_at || 0).getTime() - new Date(a.updated_at || a.archived_at || 0).getTime())
+  }, [language, query, sort, viewFlows])
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
@@ -76,9 +84,23 @@ export default function FlowCatalog({
 
     <div className="catalog-toolbar">
       <div className="catalog-summary"><Layers3 size={17} /><strong>{activeFlows.length === 1 ? t('catalog.countOne') : t('catalog.countMany', { count: activeFlows.length })}</strong></div>
-      <div className="catalog-filters" role="group" aria-label={t('catalog.filters')}>
-        <button className={view === 'active' ? 'active' : ''} onClick={() => setView('active')}>{t('catalog.active')}<span>{activeFlows.length}</span></button>
-        <button className={view === 'archived' ? 'active' : ''} onClick={() => { setShowCreate(false); setView('archived') }}>{t('catalog.archived')}<span>{archivedFlows.length}</span></button>
+      <div className="catalog-controls">
+        <label className="catalog-search">
+          <Search size={15} />
+          <input aria-label={t('catalog.search')} value={query} onChange={event => setQuery(event.target.value)} placeholder={t('catalog.searchPlaceholder')} />
+          {query && <button type="button" aria-label={t('catalog.clearSearch')} title={t('catalog.clearSearch')} onClick={() => setQuery('')}><X size={14} /></button>}
+        </label>
+        <label className="catalog-sort">
+          <ArrowUpDown size={14} />
+          <select aria-label={t('catalog.sort')} value={sort} onChange={event => setSort(event.target.value as 'updated' | 'name')}>
+            <option value="updated">{t('catalog.sortRecent')}</option>
+            <option value="name">{t('catalog.sortName')}</option>
+          </select>
+        </label>
+        <div className="catalog-filters" role="group" aria-label={t('catalog.filters')}>
+          <button className={view === 'active' ? 'active' : ''} onClick={() => setView('active')}>{t('catalog.active')}<span>{activeFlows.length}</span></button>
+          <button className={view === 'archived' ? 'active' : ''} onClick={() => { setShowCreate(false); setView('archived') }}>{t('catalog.archived')}<span>{archivedFlows.length}</span></button>
+        </div>
       </div>
     </div>
 
@@ -98,10 +120,12 @@ export default function FlowCatalog({
     </section>}
 
     {!showCreate && visibleFlows.length === 0 && <section className="catalog-empty panel">
-      {view === 'active' ? <Workflow size={38} /> : <Archive size={38} />}
-      <h2>{view === 'active' ? t('catalog.emptyTitle') : t('catalog.noArchivedTitle')}</h2>
-      <p>{view === 'active' ? t('catalog.emptyDescription') : t('catalog.noArchivedDescription')}</p>
-      {view === 'active' && <button className="primary-btn" onClick={() => setShowCreate(true)}><Plus size={16} />{t('catalog.newIvr')}</button>}
+      {query ? <Search size={38} /> : view === 'active' ? <Workflow size={38} /> : <Archive size={38} />}
+      <h2>{query ? t('catalog.noResultsTitle') : view === 'active' ? t('catalog.emptyTitle') : t('catalog.noArchivedTitle')}</h2>
+      <p>{query ? t('catalog.noResultsDescription', { query }) : view === 'active' ? t('catalog.emptyDescription') : t('catalog.noArchivedDescription')}</p>
+      {query
+        ? <button className="secondary-btn" onClick={() => setQuery('')}><X size={16} />{t('catalog.clearSearch')}</button>
+        : view === 'active' && <button className="primary-btn" onClick={() => setShowCreate(true)}><Plus size={16} />{t('catalog.newIvr')}</button>}
     </section>}
 
     <div className="flow-cards">
