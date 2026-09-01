@@ -1,12 +1,13 @@
-import type { AgentPresence, AgentState, AuthMe, AuthTokenResponse, CallSession, FlowDefinition, FlowValidationResult, HealthStatus, MetricsSummary, WorkspaceMember, WorkspaceRole, WrapUpCode } from './types'
+import { clearAuthSession, getManagementToken, getWorkspaceId } from './authStorage'
+import type { AgentPresence, AgentState, AuthCapabilities, AuthMe, AuthTokenResponse, CallSession, FlowDefinition, FlowValidationResult, HealthStatus, MetricsSummary, WorkspaceMember, WorkspaceRole, WrapUpCode } from './types'
 import type { Language } from './i18n'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 export const AUTH_EXPIRED_EVENT = 'nemesys:auth-expired'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const managementToken = window.sessionStorage.getItem('nemesys_management_token')
-  const workspaceId = window.sessionStorage.getItem('nemesys_workspace_id')
+  const managementToken = getManagementToken()
+  const workspaceId = getWorkspaceId()
   const response = await fetch(`${API}${path}`, {
     ...init,
     headers: {
@@ -27,8 +28,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
     const requestId = response.headers.get('X-Request-ID')
     if (response.status === 401 && managementToken && path !== '/api/auth/login') {
-      window.sessionStorage.removeItem('nemesys_management_token')
-      window.sessionStorage.removeItem('nemesys_workspace_id')
+      clearAuthSession()
       window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT))
     }
     throw new Error(requestId ? `${message} (request ${requestId})` : message)
@@ -39,6 +39,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   health: () => request<HealthStatus>('/health'),
+  authCapabilities: () => request<AuthCapabilities>('/api/auth/capabilities'),
   listFlows: (includeArchived = false) => request<FlowDefinition[]>(`/api/flows?include_archived=${includeArchived}`),
   getFlow: (id: string) => request<FlowDefinition>(`/api/flows/${id}`),
   getFlowVersions: (id: string) => request<FlowDefinition[]>(`/api/flows/${id}/versions`),

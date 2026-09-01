@@ -8,6 +8,7 @@ from app.core.config import get_settings
 from app.core.db import get_db
 from app.demo_flow import build_demo_flow
 from app.models import (
+    AuthCapabilities,
     AuthMe,
     AuthTokenResponse,
     LoginRequest,
@@ -22,6 +23,11 @@ from app.services.auth import AuthError, AuthService
 from app.services.flow_repository import FlowRepository
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+
+@router.get("/capabilities", response_model=AuthCapabilities)
+def capabilities(db: Session = Depends(get_db)) -> AuthCapabilities:
+    return AuthCapabilities(owner_registration_available=not AuthService(db).has_users())
 
 
 @router.post("/register", response_model=AuthTokenResponse, status_code=201)

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Bot, ClipboardCheck, Clock3, Contact, Headphones, Inbox, ListChecks, LoaderCircle, MessageSquareText, Radio, RefreshCw, Save, Sparkles, UserCheck, UserRound } from 'lucide-react'
 import { api } from '../api'
+import { getManagementToken } from '../authStorage'
 import { useI18n, type TranslationKey } from '../i18n'
 import type { AgentPresence, AgentRoutingStatus, AgentState, AuthMe, CallSession, WrapUpCode } from '../types'
 
@@ -42,7 +43,7 @@ async function fetchQueueState(agentName: string) {
 
 export default function CollaborateQueue() {
   const { language, t } = useI18n()
-  const isAuthenticated = Boolean(window.sessionStorage.getItem('nemesys_management_token'))
+  const isAuthenticated = Boolean(getManagementToken())
   const storedAgentName = window.localStorage.getItem(AGENT_STORAGE_KEY) || ''
   const [sessions, setSessions] = useState<CallSession[]>([])
   const [assignedSessions, setAssignedSessions] = useState<CallSession[]>([])

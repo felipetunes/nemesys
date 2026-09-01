@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.15.0 — 2026-09-01
+
+### Added
+
+- Public authentication capability endpoint that reports whether initial-owner registration is still available.
+- Persistent browser authentication storage with automatic migration from the previous tab-only session format.
+- Automated coverage for owner-registration availability, persistent credentials, legacy-session migration and logout cleanup.
+
+### Changed
+
+- The login portal hides **Create owner account** as soon as the installation has its first user.
+- Authenticated sessions now survive tab and browser restarts while continuing to respect explicit logout, revocation and server-side expiration.
+- The login form explains how session persistence and security revocation interact.
+
 ## 0.14.0 — 2026-09-01
 
 ### Added

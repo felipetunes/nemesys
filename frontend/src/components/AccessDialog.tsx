@@ -1,12 +1,14 @@
 import { useState, type FormEvent } from 'react'
 import { KeyRound, LogIn, LogOut, Mail, ShieldCheck, UserPlus, X } from 'lucide-react'
 import { api } from '../api'
+import { setAuthSession } from '../authStorage'
 import { useI18n, type Language, type TranslationKey } from '../i18n'
 import type { AuthMe } from '../types'
 
 interface Props {
   configured: boolean
   currentUser: AuthMe | null
+  ownerRegistrationAvailable: boolean
   onClose: () => void
   onAuthenticated: () => void
   onClear: () => void | Promise<void>
@@ -14,7 +16,7 @@ interface Props {
   onLanguageChange: (language: Language) => void | Promise<void>
 }
 
-export default function AccessDialog({ configured, currentUser, onClose, onAuthenticated, onClear, onWorkspaceChange, onLanguageChange }: Props) {
+export default function AccessDialog({ configured, currentUser, ownerRegistrationAvailable, onClose, onAuthenticated, onClear, onWorkspaceChange, onLanguageChange }: Props) {
   const { language, setLanguage, t } = useI18n()
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [email, setEmail] = useState('')
@@ -33,8 +35,7 @@ export default function AccessDialog({ configured, currentUser, onClose, onAuthe
       setLanguage(result.language)
       const workspace = result.workspaces[0]
       if (!workspace) throw new Error(t('access.noMembership'))
-      window.sessionStorage.setItem('nemesys_management_token', result.token)
-      window.sessionStorage.setItem('nemesys_workspace_id', workspace.id)
+      setAuthSession(result.token, workspace.id)
       onAuthenticated()
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason))
@@ -58,10 +59,10 @@ export default function AccessDialog({ configured, currentUser, onClose, onAuthe
       </> : <>
         <h2>{t('access.title')}</h2>
         <p>{t('access.description')}</p>
-        <div className="access-tabs">
+        {ownerRegistrationAvailable && <div className="access-tabs">
           <button className={mode === 'login' ? 'active' : ''} onClick={() => setMode('login')}>{t('access.signIn')}</button>
           <button className={mode === 'register' ? 'active' : ''} onClick={() => setMode('register')}>{t('access.createOwner')}</button>
-        </div>
+        </div>}
         <form onSubmit={submit}>
           <label>{t('access.email')}<input type="email" autoComplete="email" required value={email} onChange={event => setEmail(event.target.value)} /></label>
           <label>{t('access.password')}<input type="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} minLength={mode === 'register' ? 12 : 1} required value={password} onChange={event => setPassword(event.target.value)} /></label>

@@ -20,6 +20,7 @@ import {
   Workflow,
 } from 'lucide-react'
 import { api, AUTH_EXPIRED_EVENT } from './api'
+import { clearAuthSession, getManagementToken, setWorkspaceId } from './authStorage'
 import AccessDialog from './components/AccessDialog'
 import AuthPortal from './components/AuthPortal'
 import CollaborateQueue from './components/CollaborateQueue'
@@ -68,10 +69,11 @@ export default function App() {
   const [notice, setNotice] = useState('')
   const [actionError, setActionError] = useState('')
   const [flowError, setFlowError] = useState('')
-  const [hasManagementToken, setHasManagementToken] = useState(() => Boolean(window.sessionStorage.getItem('nemesys_management_token')))
+  const [hasManagementToken, setHasManagementToken] = useState(() => Boolean(getManagementToken()))
   const [currentUser, setCurrentUser] = useState<AuthMe | null>(null)
   const [accessState, setAccessState] = useState<AccessState>('checking')
   const [authRequired, setAuthRequired] = useState(true)
+  const [ownerRegistrationAvailable, setOwnerRegistrationAvailable] = useState(false)
   const [sessionExpired, setSessionExpired] = useState(false)
   const [accessRevision, setAccessRevision] = useState(0)
   const [showAccess, setShowAccess] = useState(false)
@@ -104,12 +106,12 @@ export default function App() {
       setLanguage(user.language)
       setCurrentUser(user)
       setHasManagementToken(true)
+      setOwnerRegistrationAvailable(false)
       setAccessState('authenticated')
       setAccessRevision(value => value + 1)
       setShowAccess(false)
     } catch {
-      window.sessionStorage.removeItem('nemesys_management_token')
-      window.sessionStorage.removeItem('nemesys_workspace_id')
+      clearAuthSession()
       setCurrentUser(null)
       setHasManagementToken(false)
       setLanguage(detectSystemLanguage())
@@ -119,11 +121,12 @@ export default function App() {
 
   useEffect(() => {
     let active = true
-    api.health()
-      .then(health => {
+    Promise.all([api.health(), api.authCapabilities()])
+      .then(([health, capabilities]) => {
         if (!active) return
         setAuthRequired(health.management_api_protected)
-        if (window.sessionStorage.getItem('nemesys_management_token')) void refreshAccess()
+        setOwnerRegistrationAvailable(capabilities.owner_registration_available)
+        if (getManagementToken()) void refreshAccess()
         else setAccessState('locked')
       })
       .catch(() => { if (active) setAccessState('locked') })
@@ -422,8 +425,7 @@ export default function App() {
   }
 
   const enterDemo = () => {
-    window.sessionStorage.removeItem('nemesys_management_token')
-    window.sessionStorage.removeItem('nemesys_workspace_id')
+    clearAuthSession()
     resetWorkspaceState()
     setCurrentUser(null)
     setHasManagementToken(false)
@@ -436,15 +438,15 @@ export default function App() {
 
   const clearAccess = async () => {
     try {
-      if (window.sessionStorage.getItem('nemesys_management_token')) await api.logout()
+      if (getManagementToken()) await api.logout()
     } catch {
       // Local cleanup still signs the user out when the server session already expired.
     } finally {
-      window.sessionStorage.removeItem('nemesys_management_token')
-      window.sessionStorage.removeItem('nemesys_workspace_id')
+      clearAuthSession()
       resetWorkspaceState()
       setCurrentUser(null)
       setHasManagementToken(false)
+      setOwnerRegistrationAvailable(false)
       setLanguage(detectSystemLanguage())
       setSessionExpired(false)
       setAccessState('locked')
@@ -453,7 +455,7 @@ export default function App() {
   }
 
   const changeWorkspace = (workspaceId: string) => {
-    window.sessionStorage.setItem('nemesys_workspace_id', workspaceId)
+    setWorkspaceId(workspaceId)
     void refreshAccess()
   }
 
@@ -473,7 +475,7 @@ export default function App() {
   }
 
   if (accessState === 'checking') return <div className="auth-loading"><LoaderCircle className="spin" /><strong>Nemesys</strong><span>{t('authPortal.checkingSession')}</span></div>
-  if (accessState === 'locked') return <AuthPortal allowDemo={!authRequired} sessionExpired={sessionExpired} onAuthenticated={() => void refreshAccess()} onDemo={enterDemo} />
+  if (accessState === 'locked') return <AuthPortal allowDemo={!authRequired} ownerRegistrationAvailable={ownerRegistrationAvailable} sessionExpired={sessionExpired} onAuthenticated={() => void refreshAccess()} onDemo={enterDemo} />
 
   return (
     <div className="app-shell">
@@ -565,7 +567,7 @@ export default function App() {
 
         {visibleApplication === 'admin' && <Suspense fallback={<div className="loading"><LoaderCircle className="spin" />{t('users.loading')}</div>}><UserManagement key={accessRevision} /></Suspense>}
       </main>
-      {showAccess && <AccessDialog configured={hasManagementToken} currentUser={currentUser} onClose={() => setShowAccess(false)} onAuthenticated={() => void refreshAccess()} onClear={clearAccess} onWorkspaceChange={changeWorkspace} onLanguageChange={changeLanguage} />}
+      {showAccess && <AccessDialog configured={hasManagementToken} currentUser={currentUser} ownerRegistrationAvailable={ownerRegistrationAvailable} onClose={() => setShowAccess(false)} onAuthenticated={() => void refreshAccess()} onClear={clearAccess} onWorkspaceChange={changeWorkspace} onLanguageChange={changeLanguage} />}
       {showHelp && <HelpCenter canAdminister={canAdminister} canEdit={canEdit} hasFlow={Boolean(flow)} onNavigate={navigateToLearningDestination} onClose={() => setShowHelp(false)} />}
     </div>
   )

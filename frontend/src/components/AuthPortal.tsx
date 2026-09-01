@@ -1,17 +1,19 @@
 import { useState, type FormEvent } from 'react'
 import { ArrowRight, CheckCircle2, Languages, LockKeyhole, LogIn, Network, ShieldCheck, UserPlus, UsersRound, Workflow } from 'lucide-react'
 import { api } from '../api'
+import { setAuthSession } from '../authStorage'
 import { useI18n, type Language, type TranslationKey } from '../i18n'
 import type { AuthTokenResponse } from '../types'
 
 interface Props {
   allowDemo: boolean
+  ownerRegistrationAvailable: boolean
   sessionExpired: boolean
   onAuthenticated: () => void
   onDemo: () => void
 }
 
-export default function AuthPortal({ allowDemo, sessionExpired, onAuthenticated, onDemo }: Props) {
+export default function AuthPortal({ allowDemo, ownerRegistrationAvailable, sessionExpired, onAuthenticated, onDemo }: Props) {
   const { language, setLanguage, t } = useI18n()
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [email, setEmail] = useState('')
@@ -22,8 +24,7 @@ export default function AuthPortal({ allowDemo, sessionExpired, onAuthenticated,
   const [error, setError] = useState('')
 
   const activateSession = (result: AuthTokenResponse, workspaceId: string) => {
-    window.sessionStorage.setItem('nemesys_management_token', result.token)
-    window.sessionStorage.setItem('nemesys_workspace_id', workspaceId)
+    setAuthSession(result.token, workspaceId)
     onAuthenticated()
   }
 
@@ -79,10 +80,10 @@ export default function AuthPortal({ allowDemo, sessionExpired, onAuthenticated,
           <h2 id="auth-portal-form-title">{t(mode === 'login' ? 'authPortal.welcomeBack' : 'authPortal.createWorkspace')}</h2>
           <p>{t(mode === 'login' ? 'authPortal.loginDescription' : 'authPortal.registerDescription')}</p>
           {sessionExpired && <div className="auth-session-note"><LockKeyhole size={15} />{t('authPortal.sessionExpired')}</div>}
-          <div className="access-tabs" role="tablist" aria-label={t('access.dialogLabel')}>
+          {ownerRegistrationAvailable && <div className="access-tabs" role="tablist" aria-label={t('access.dialogLabel')}>
             <button type="button" role="tab" aria-selected={mode === 'login'} className={mode === 'login' ? 'active' : ''} onClick={() => { setMode('login'); setError('') }}>{t('access.signIn')}</button>
             <button type="button" role="tab" aria-selected={mode === 'register'} className={mode === 'register' ? 'active' : ''} onClick={() => { setMode('register'); setError('') }}>{t('access.createOwner')}</button>
-          </div>
+          </div>}
           <form onSubmit={submit}>
             <label>{t('access.email')}<input autoFocus type="email" autoComplete="email" required value={email} onChange={event => setEmail(event.target.value)} placeholder="nome@empresa.com" /></label>
             <label>{t('access.password')}<input type="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} minLength={mode === 'register' ? 12 : 1} required value={password} onChange={event => setPassword(event.target.value)} /></label>
@@ -90,6 +91,7 @@ export default function AuthPortal({ allowDemo, sessionExpired, onAuthenticated,
             {mode === 'register' && <div className="auth-form-hint"><CheckCircle2 size={14} />{t('authPortal.passwordHint')}</div>}
             {error && <div className="error-box auth-error" role="alert">{error}</div>}
             <button className="primary-btn access-submit" disabled={busy}>{mode === 'login' ? <LogIn size={16} /> : <UserPlus size={16} />}{busy ? t('access.wait') : t(mode === 'login' ? 'access.signIn' : 'access.createAccount')}</button>
+            {mode === 'login' && <div className="auth-persistence-hint"><ShieldCheck size={14} />{t('authPortal.persistenceHint')}</div>}
           </form>
           {allowDemo && <div className="demo-access"><span>{t('authPortal.or')}</span><button className="secondary-btn" onClick={onDemo}><Workflow size={16} />{t('authPortal.tryDemo')}</button><small>{t('authPortal.demoDescription')}</small></div>}
         </>}

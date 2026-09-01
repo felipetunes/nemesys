@@ -310,6 +310,10 @@ class LoginRequest(StrictModel):
     password: str = Field(min_length=1, max_length=200)
 
 
+class AuthCapabilities(StrictModel):
+    owner_registration_available: bool
+
+
 class WorkspaceInfo(StrictModel):
     id: str
     name: str

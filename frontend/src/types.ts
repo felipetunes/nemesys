@@ -129,6 +129,10 @@ export interface AuthTokenResponse {
   workspaces: WorkspaceInfo[]
 }
 
+export interface AuthCapabilities {
+  owner_registration_available: boolean
+}
+
 export interface HealthStatus {
   status: string
   version: string

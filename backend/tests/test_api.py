@@ -291,6 +291,7 @@ async def test_user_authentication_scopes_flows_to_workspace(api_client, monkeyp
     monkeypatch.setenv("ALLOW_REGISTRATION", "false")
     get_settings.cache_clear()
     try:
+        registration_before = await client.get("/api/auth/capabilities")
         blocked = await client.get("/api/flows")
         registered = await client.post(
             "/api/auth/register",
@@ -319,12 +320,14 @@ async def test_user_authentication_scopes_flows_to_workspace(api_client, monkeyp
                 "workspace_name": "Second Support",
             },
         )
+        registration_after = await client.get("/api/auth/capabilities")
         logged_out = await client.post("/api/auth/logout", headers=headers)
         revoked = await client.get("/api/flows", headers=headers)
     finally:
         get_settings.cache_clear()
 
     assert blocked.status_code == 401
+    assert registration_before.json()["owner_registration_available"] is True
     assert registered.status_code == 201
     assert len(workspace_flows.json()) == 1
     assert workspace_flows.json()[0]["id"] == "demo-commerce"
@@ -332,6 +335,7 @@ async def test_user_authentication_scopes_flows_to_workspace(api_client, monkeyp
     assert workspace_flow_by_id.json()["name"] == "Example Support Demo IVR"
     assert logged_in.status_code == 200
     assert second_registration.status_code == 403
+    assert registration_after.json()["owner_registration_available"] is False
     assert logged_out.status_code == 204
     assert revoked.status_code == 401
 
@@ -631,7 +635,7 @@ async def test_health_endpoints_and_security_headers(api_client):
     response = await client.get("/health/ready", headers={"X-Request-ID": "test-request-123"})
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ready", "version": "0.14.0"}
+    assert response.json() == {"status": "ready", "version": "0.15.0"}
     assert response.headers["x-request-id"] == "test-request-123"
     assert response.headers["x-content-type-options"] == "nosniff"
     assert response.headers["x-frame-options"] == "DENY"

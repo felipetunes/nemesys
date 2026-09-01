@@ -4,7 +4,7 @@
 [![Release](https://img.shields.io/github/v/release/felipetunes/nemesys)](https://github.com/felipetunes/nemesys/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-7c5cff.svg)](LICENSE)
 
-**Current project version: `0.14.0` — adaptive language and portable user preferences**
+**Current project version: `0.15.0` — persistent sign-in and safer account onboarding**
 
 **A visual, AI-assisted IVR flow builder and runtime for learning, prototyping and portfolio demos.**
 
@@ -71,7 +71,9 @@ Traditional IVRs are often built inside proprietary platforms. Nemesys exposes t
 - role-aware navigation and read-only experiences for viewers, with administrative controls reserved for admins and owners;
 - explicit workspace switching, server-backed sign-out and automatic return to login when a session expires;
 - an intentionally separate offline demo entry point when authentication is disabled;
-- operating-system language detection before login and a profile-backed language preference after authentication.
+- operating-system language detection before login and a profile-backed language preference after authentication;
+- initial-owner registration shown only while the installation has no users;
+- browser-persistent authentication that survives tab and browser restarts until explicit logout, revocation or configured server expiry.
 
 ## Product areas and languages
 
@@ -180,7 +182,7 @@ npm run dev
 
 Open `http://localhost:5173`.
 
-On the first access, choose **Create owner account** to create the initial owner and isolated workspace. Subsequent accounts are created by an admin or owner in **Administration** unless public registration is explicitly enabled.
+On the first access, choose **Create owner account** to create the initial owner and isolated workspace. As soon as that account exists, this option disappears from the login portal. Subsequent accounts are created by an admin or owner in **Administration**.
 
 ### Docker
 
@@ -244,6 +246,7 @@ POST   /api/flows/{flow_id}/versions/{version}/restore
 DELETE /api/flows/{flow_id}
 POST   /api/auth/register
 POST   /api/auth/login
+GET    /api/auth/capabilities
 GET    /api/auth/me
 PATCH  /api/auth/me
 POST   /api/auth/logout
@@ -303,7 +306,7 @@ Workspace roles are enforced server-side: viewers can inspect, editors can modif
 
 When authentication is enabled, Collaborate binds agent operations to the signed-in user's email, so one agent cannot claim work or change presence as another. Manual agent names remain available only in offline demo mode.
 
-The login portal stores its token only for the current browser tab. After login, the account dialog shows the signed-in identity, active workspace, role and profile language, and provides workspace switching plus server-backed sign-out. Expired or revoked sessions return to the portal automatically and restore the operating-system language. `ADMIN_API_KEY` remains available as a bootstrap/operator credential.
+The login portal persists the signed-in session in that browser, including across tab and browser restarts. Explicit logout clears the browser credential and revokes the server session; sessions still obey `AUTH_SESSION_DAYS` and can be revoked administratively. After login, the account dialog shows the signed-in identity, active workspace, role and profile language, and provides workspace switching plus server-backed sign-out. Expired or revoked sessions return to the portal automatically and restore the operating-system language. `ADMIN_API_KEY` remains available as a bootstrap/operator credential.
 
 ## Production profile
 
