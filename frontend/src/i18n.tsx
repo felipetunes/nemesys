@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 
 export type Language = 'pt-BR' | 'en-US'
 
@@ -432,6 +432,8 @@ const enUS = {
   'account.description': 'Review your identity, role and active workspace.',
   'account.signedInAs': 'Signed in as',
   'account.workspace': 'Active workspace',
+  'account.language': 'Profile language',
+  'account.languageHint': 'Saved to your profile and applied whenever you sign in.',
   'permissions.title': 'This area requires another role',
   'permissions.description': 'Your current role can inspect operational data, but cannot perform this action.',
   'permissions.roleRequired': 'An editor, administrator or owner role is required.',
@@ -888,6 +890,8 @@ const ptBR: Record<TranslationKey, string> = {
   'account.description': 'Consulte sua identidade, papel e workspace ativo.',
   'account.signedInAs': 'Conectado como',
   'account.workspace': 'Workspace ativo',
+  'account.language': 'Idioma do perfil',
+  'account.languageHint': 'Salvo no seu perfil e aplicado sempre que você entrar.',
   'permissions.title': 'Esta área exige outro papel',
   'permissions.description': 'Seu papel atual permite consultar dados operacionais, mas não executar esta ação.',
   'permissions.roleRequired': 'É necessário papel de editor, administrador ou proprietário.',
@@ -936,21 +940,29 @@ interface I18nValue {
 }
 
 const I18nContext = createContext<I18nValue | null>(null)
-const STORAGE_KEY = 'nemesys_language'
 
-function initialLanguage(): Language {
-  if (typeof window === 'undefined') return 'pt-BR'
-  const stored = window.localStorage.getItem(STORAGE_KEY)
-  return stored === 'en-US' || stored === 'pt-BR' ? stored : 'pt-BR'
+// Browsers expose the operating-system preference through navigator.languages.
+// eslint-disable-next-line react-refresh/only-export-components
+export function detectSystemLanguage(preferredLanguages?: readonly string[]): Language {
+  const candidates = preferredLanguages ?? (
+    typeof navigator === 'undefined'
+      ? []
+      : navigator.languages?.length ? navigator.languages : [navigator.language]
+  )
+  for (const candidate of candidates) {
+    const baseLanguage = candidate.trim().toLowerCase().split(/[-_]/, 1)[0]
+    if (baseLanguage === 'pt') return 'pt-BR'
+    if (baseLanguage === 'en') return 'en-US'
+  }
+  return 'pt-BR'
 }
 
 export function I18nProvider({ children }: { children: ReactNode }) {
-  const [language, setLanguageState] = useState<Language>(initialLanguage)
+  const [language, setLanguageState] = useState<Language>(detectSystemLanguage)
 
-  const setLanguage = (nextLanguage: Language) => {
-    window.localStorage.setItem(STORAGE_KEY, nextLanguage)
+  const setLanguage = useCallback((nextLanguage: Language) => {
     setLanguageState(nextLanguage)
-  }
+  }, [])
 
   useEffect(() => {
     document.documentElement.lang = language
@@ -960,7 +972,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     language,
     setLanguage,
     t: (key, params) => translate(language, key, params),
-  }), [language])
+  }), [language, setLanguage])
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>
 }

@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { KeyRound, LogIn, LogOut, Mail, ShieldCheck, UserPlus, X } from 'lucide-react'
 import { api } from '../api'
-import { useI18n, type TranslationKey } from '../i18n'
+import { useI18n, type Language, type TranslationKey } from '../i18n'
 import type { AuthMe } from '../types'
 
 interface Props {
@@ -11,10 +11,11 @@ interface Props {
   onAuthenticated: () => void
   onClear: () => void | Promise<void>
   onWorkspaceChange: (workspaceId: string) => void
+  onLanguageChange: (language: Language) => void | Promise<void>
 }
 
-export default function AccessDialog({ configured, currentUser, onClose, onAuthenticated, onClear, onWorkspaceChange }: Props) {
-  const { t } = useI18n()
+export default function AccessDialog({ configured, currentUser, onClose, onAuthenticated, onClear, onWorkspaceChange, onLanguageChange }: Props) {
+  const { language, setLanguage, t } = useI18n()
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -28,7 +29,8 @@ export default function AccessDialog({ configured, currentUser, onClose, onAuthe
     try {
       const result = mode === 'login'
         ? await api.login(email, password)
-        : await api.register(email, password, workspaceName)
+        : await api.register(email, password, workspaceName, language)
+      setLanguage(result.language)
       const workspace = result.workspaces[0]
       if (!workspace) throw new Error(t('access.noMembership'))
       window.sessionStorage.setItem('nemesys_management_token', result.token)
@@ -50,6 +52,7 @@ export default function AccessDialog({ configured, currentUser, onClose, onAuthe
         <p>{t('account.description')}</p>
         <div className="account-identity"><Mail size={17} /><div><small>{t('account.signedInAs')}</small><strong>{currentUser.email}</strong></div></div>
         <label>{t('account.workspace')}<select value={currentUser.active_workspace_id} onChange={event => onWorkspaceChange(event.target.value)}>{currentUser.workspaces.map(workspace => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}</select></label>
+        <label>{t('account.language')}<select value={language} onChange={event => void onLanguageChange(event.target.value as Language)}><option value="pt-BR">Português (Brasil)</option><option value="en-US">English (United States)</option></select><small className="account-field-hint">{t('account.languageHint')}</small></label>
         {currentUser.workspaces.find(workspace => workspace.id === currentUser.active_workspace_id) && <div className="account-role"><ShieldCheck size={16} /><div><strong>{t(`role.${currentUser.workspaces.find(workspace => workspace.id === currentUser.active_workspace_id)!.role}` as TranslationKey)}</strong><span>{t(`role.${currentUser.workspaces.find(workspace => workspace.id === currentUser.active_workspace_id)!.role}Description` as TranslationKey)}</span></div></div>}
         <button className="secondary-btn account-signout" onClick={() => void onClear()}><LogOut size={16} />{t('access.signOut')}</button>
       </> : <>

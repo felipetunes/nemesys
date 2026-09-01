@@ -1,4 +1,5 @@
 import type { AgentPresence, AgentState, AuthMe, AuthTokenResponse, CallSession, FlowDefinition, FlowValidationResult, HealthStatus, MetricsSummary, WorkspaceMember, WorkspaceRole, WrapUpCode } from './types'
+import type { Language } from './i18n'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 export const AUTH_EXPIRED_EVENT = 'nemesys:auth-expired'
@@ -60,12 +61,13 @@ export const api = {
   listAgentStates: () => request<AgentState[]>('/api/agents'),
   updateAgentPresence: (agentName: string, presence: AgentPresence) => request<AgentState>(`/api/agents/${encodeURIComponent(agentName)}/presence`, { method: 'PUT', body: JSON.stringify({ presence }) }),
   me: () => request<AuthMe>('/api/auth/me'),
+  updateProfileLanguage: (language: Language) => request<AuthMe>('/api/auth/me', { method: 'PATCH', body: JSON.stringify({ language }) }),
   listWorkspaceMembers: () => request<WorkspaceMember[]>('/api/workspaces/members'),
   createWorkspaceUser: (email: string, password: string, role: WorkspaceRole) => request<WorkspaceMember>('/api/workspaces/users', { method: 'POST', body: JSON.stringify({ email, password, role }) }),
   updateWorkspaceMemberRole: (userId: string, role: WorkspaceRole) => request<WorkspaceMember>(`/api/workspaces/members/${userId}`, { method: 'PATCH', body: JSON.stringify({ role }) }),
   updateWorkspaceMemberStatus: (userId: string, active: boolean) => request<WorkspaceMember>(`/api/workspaces/members/${userId}/status`, { method: 'PATCH', body: JSON.stringify({ active }) }),
   removeWorkspaceMember: (userId: string) => request<void>(`/api/workspaces/members/${userId}`, { method: 'DELETE' }),
   login: (email: string, password: string) => request<AuthTokenResponse>('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
-  register: (email: string, password: string, workspaceName: string) => request<AuthTokenResponse>('/api/auth/register', { method: 'POST', body: JSON.stringify({ email, password, workspace_name: workspaceName }) }),
+  register: (email: string, password: string, workspaceName: string, language: Language) => request<AuthTokenResponse>('/api/auth/register', { method: 'POST', body: JSON.stringify({ email, password, workspace_name: workspaceName, language }) }),
   logout: () => request<void>('/api/auth/logout', { method: 'POST' }),
 }

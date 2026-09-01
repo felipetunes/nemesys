@@ -115,6 +115,7 @@ export interface WorkspaceMember {
 export interface AuthMe {
   user_id: string
   email: string
+  language: 'pt-BR' | 'en-US'
   active_workspace_id: string
   workspaces: WorkspaceInfo[]
 }
@@ -124,6 +125,7 @@ export interface AuthTokenResponse {
   expires_at: string
   user_id: string
   email: string
+  language: 'pt-BR' | 'en-US'
   workspaces: WorkspaceInfo[]
 }
 

@@ -23,6 +23,7 @@ NodeType = Literal[
 VariableName = Annotated[str, Field(min_length=1, max_length=120, pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")]
 FlowIdentifier = Annotated[str, Field(min_length=1, max_length=120, pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]*$")]
 WorkspaceRole = Literal["viewer", "editor", "admin", "owner"]
+SupportedLanguage = Literal["pt-BR", "en-US"]
 
 
 class StrictModel(BaseModel):
@@ -301,6 +302,7 @@ class RegisterRequest(StrictModel):
     email: str = Field(min_length=5, max_length=320, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
     password: str = Field(min_length=12, max_length=200)
     workspace_name: str = Field(min_length=2, max_length=120)
+    language: SupportedLanguage = "pt-BR"
 
 
 class LoginRequest(StrictModel):
@@ -347,14 +349,20 @@ class AuthTokenResponse(StrictModel):
     expires_at: datetime
     user_id: str
     email: str
+    language: SupportedLanguage
     workspaces: list[WorkspaceInfo]
 
 
 class AuthMe(StrictModel):
     user_id: str
     email: str
+    language: SupportedLanguage
     active_workspace_id: str
     workspaces: list[WorkspaceInfo]
+
+
+class UserProfileUpdate(StrictModel):
+    language: SupportedLanguage
 
 
 class WorkspaceRow(Base):
@@ -366,9 +374,13 @@ class WorkspaceRow(Base):
 
 class UserRow(Base):
     __tablename__ = "users"
+    __table_args__ = (
+        CheckConstraint("language IN ('pt-BR', 'en-US')", name="ck_users_language"),
+    )
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(500))
+    language: Mapped[str] = mapped_column(String(10), default="pt-BR")
     failed_login_attempts: Mapped[int] = mapped_column(Integer, default=0)
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

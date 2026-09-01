@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.models import (
     AuthSessionRow,
     AuthTokenResponse,
+    SupportedLanguage,
     UserRow,
     WorkspaceInfo,
     WorkspaceMember,
@@ -77,13 +78,27 @@ class AuthService:
     def has_users(self) -> bool:
         return bool(self.db.scalar(select(func.count()).select_from(UserRow)))
 
-    def register(self, email: str, password: str, workspace_name: str, session_days: int) -> AuthTokenResponse:
+    def register(
+        self,
+        email: str,
+        password: str,
+        workspace_name: str,
+        session_days: int,
+        language: SupportedLanguage = "pt-BR",
+    ) -> AuthTokenResponse:
         normalized_email = email.strip().lower()
         if self.db.scalar(select(UserRow).where(UserRow.email == normalized_email)) is not None:
             raise AuthError("An account with this email already exists")
         user_id = str(uuid4())
         workspace_id = str(uuid4())
-        self.db.add(UserRow(id=user_id, email=normalized_email, password_hash=hash_password(password)))
+        self.db.add(
+            UserRow(
+                id=user_id,
+                email=normalized_email,
+                password_hash=hash_password(password),
+                language=language,
+            )
+        )
         self.db.add(WorkspaceRow(id=workspace_id, name=workspace_name.strip()))
         self.db.add(WorkspaceMembershipRow(user_id=user_id, workspace_id=workspace_id, role="owner", active=True))
         try:
@@ -260,6 +275,13 @@ class AuthService:
         self.db.commit()
         return self._workspace_member(user, role, active=membership.active)
 
+    def update_language(self, user_id: str, language: SupportedLanguage) -> None:
+        user = self.db.get(UserRow, user_id)
+        if user is None:
+            raise AuthError("User not found")
+        user.language = language
+        self.db.commit()
+
     def set_workspace_member_active(
         self,
         workspace_id: str,
@@ -312,11 +334,15 @@ class AuthService:
             )
         )
         self.db.commit()
+        user = self.db.get(UserRow, user_id)
+        if user is None:
+            raise AuthError("User not found")
         return AuthTokenResponse(
             token=token,
             expires_at=expires_at,
             user_id=user_id,
             email=email,
+            language=cast(SupportedLanguage, user.language),
             workspaces=self.workspaces_for_user(user_id),
         )
 

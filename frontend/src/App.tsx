@@ -29,7 +29,7 @@ import MetricsDashboard from './components/MetricsDashboard'
 import Simulator from './components/Simulator'
 import VersionHistory from './components/VersionHistory'
 import { createFlowId, createStarterFlow } from './flowFactory'
-import { useI18n, type Language } from './i18n'
+import { detectSystemLanguage, useI18n, type Language } from './i18n'
 import type { AuthMe, FlowDefinition } from './types'
 import { validationErrorMessage, validationSuccessMessage } from './validation'
 
@@ -101,6 +101,7 @@ export default function App() {
         setArchitectTab(current => current === 'simulator' ? 'ivrs' : current)
         setCollaborateTab(current => current === 'queue' ? 'overview' : current)
       }
+      setLanguage(user.language)
       setCurrentUser(user)
       setHasManagementToken(true)
       setAccessState('authenticated')
@@ -111,9 +112,10 @@ export default function App() {
       window.sessionStorage.removeItem('nemesys_workspace_id')
       setCurrentUser(null)
       setHasManagementToken(false)
+      setLanguage(detectSystemLanguage())
       setAccessState('locked')
     }
-  }, [resetWorkspaceState])
+  }, [resetWorkspaceState, setLanguage])
 
   useEffect(() => {
     let active = true
@@ -133,13 +135,14 @@ export default function App() {
       resetWorkspaceState()
       setCurrentUser(null)
       setHasManagementToken(false)
+      setLanguage(detectSystemLanguage())
       setSessionExpired(true)
       setAccessState('locked')
       setShowAccess(false)
     }
     window.addEventListener(AUTH_EXPIRED_EVENT, handleExpiredSession)
     return () => window.removeEventListener(AUTH_EXPIRED_EVENT, handleExpiredSession)
-  }, [resetWorkspaceState])
+  }, [resetWorkspaceState, setLanguage])
 
   useEffect(() => {
     if (accessState !== 'authenticated' && accessState !== 'demo') return
@@ -442,6 +445,7 @@ export default function App() {
       resetWorkspaceState()
       setCurrentUser(null)
       setHasManagementToken(false)
+      setLanguage(detectSystemLanguage())
       setSessionExpired(false)
       setAccessState('locked')
       setShowAccess(false)
@@ -451,6 +455,21 @@ export default function App() {
   const changeWorkspace = (workspaceId: string) => {
     window.sessionStorage.setItem('nemesys_workspace_id', workspaceId)
     void refreshAccess()
+  }
+
+  const changeLanguage = async (nextLanguage: Language) => {
+    setActionError('')
+    if (accessState !== 'authenticated' || currentUser?.user_id === 'admin') {
+      setLanguage(nextLanguage)
+      return
+    }
+    try {
+      const updatedUser = await api.updateProfileLanguage(nextLanguage)
+      setCurrentUser(updatedUser)
+      setLanguage(updatedUser.language)
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : String(error))
+    }
   }
 
   if (accessState === 'checking') return <div className="auth-loading"><LoaderCircle className="spin" /><strong>Nemesys</strong><span>{t('authPortal.checkingSession')}</span></div>
@@ -484,7 +503,7 @@ export default function App() {
           <div className="topbar-actions">
             <label className="language-picker" title={t('actions.language')}>
               <Languages size={16} />
-              <select aria-label={t('actions.language')} value={language} onChange={event => setLanguage(event.target.value as Language)}>
+              <select aria-label={t('actions.language')} value={language} onChange={event => void changeLanguage(event.target.value as Language)}>
                 <option value="pt-BR">PT-BR</option>
                 <option value="en-US">EN-US</option>
               </select>
@@ -546,7 +565,7 @@ export default function App() {
 
         {visibleApplication === 'admin' && <Suspense fallback={<div className="loading"><LoaderCircle className="spin" />{t('users.loading')}</div>}><UserManagement key={accessRevision} /></Suspense>}
       </main>
-      {showAccess && <AccessDialog configured={hasManagementToken} currentUser={currentUser} onClose={() => setShowAccess(false)} onAuthenticated={() => void refreshAccess()} onClear={clearAccess} onWorkspaceChange={changeWorkspace} />}
+      {showAccess && <AccessDialog configured={hasManagementToken} currentUser={currentUser} onClose={() => setShowAccess(false)} onAuthenticated={() => void refreshAccess()} onClear={clearAccess} onWorkspaceChange={changeWorkspace} onLanguageChange={changeLanguage} />}
       {showHelp && <HelpCenter canAdminister={canAdminister} canEdit={canEdit} hasFlow={Boolean(flow)} onNavigate={navigateToLearningDestination} onClose={() => setShowHelp(false)} />}
     </div>
   )

@@ -108,6 +108,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .account-identity small, .account-identity strong, .account-role strong, .account-role span { display:block; }
 .account-identity small { color:#78859a; font-size:9px; }
 .account-identity strong { margin-top:3px; overflow:hidden; color:#dbe2ed; font-size:11px; text-overflow:ellipsis; }
+.account-field-hint { display:block; margin-top:6px; color:#78859a; font-size:9px; font-weight:400; line-height:1.45; }
 .account-role { margin-top:5px; align-items:start; color:#8de0b4; border-color:#286e50; background:#10271d; }
 .account-role strong { color:#b2e9cc; font-size:11px; }
 .account-role span { margin-top:4px; color:#7fb99b; font-size:9px; line-height:1.45; }

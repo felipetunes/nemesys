@@ -34,7 +34,8 @@ export default function AuthPortal({ allowDemo, sessionExpired, onAuthenticated,
     try {
       const result = mode === 'login'
         ? await api.login(email.trim(), password)
-        : await api.register(email.trim(), password, workspaceName.trim())
+        : await api.register(email.trim(), password, workspaceName.trim(), language)
+      setLanguage(result.language)
       if (result.workspaces.length === 0) throw new Error(t('access.noMembership'))
       if (result.workspaces.length === 1) activateSession(result, result.workspaces[0].id)
       else setPendingSession(result)

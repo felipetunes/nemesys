@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.14.0 — 2026-09-01
+
+### Added
+
+- Browser and operating-system language detection for the unauthenticated portal.
+- Persisted `pt-BR` / `en-US` preference on each user profile, including a database migration and audited profile update endpoint.
+- Profile-language control in the account dialog and automated coverage for locale detection and cross-login persistence.
+
+### Changed
+
+- The authenticated interface now applies the user's server-side language instead of a device-local browser value.
+- Registration records the language selected or detected on the portal, while logout and session expiry return to the current system language.
+
 ## 0.13.0 — 2026-09-01
 
 ### Added

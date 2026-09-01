@@ -337,6 +337,56 @@ async def test_user_authentication_scopes_flows_to_workspace(api_client, monkeyp
 
 
 @pytest.mark.anyio
+async def test_user_language_is_persisted_in_profile(api_client, monkeypatch):
+    client, _ = api_client
+    monkeypatch.setenv("AUTH_REQUIRED", "true")
+    get_settings.cache_clear()
+    try:
+        registered = await client.post(
+            "/api/auth/register",
+            json={
+                "email": "language-owner@example.com",
+                "password": "correct horse battery staple",
+                "workspace_name": "Language Support",
+                "language": "en-US",
+            },
+        )
+        registration = registered.json()
+        workspace_id = registration["workspaces"][0]["id"]
+        headers = {
+            "Authorization": f"Bearer {registration['token']}",
+            "X-Workspace-ID": workspace_id,
+        }
+        profile = await client.get("/api/auth/me", headers=headers)
+        updated = await client.patch(
+            "/api/auth/me",
+            json={"language": "pt-BR"},
+            headers=headers,
+        )
+        invalid = await client.patch(
+            "/api/auth/me",
+            json={"language": "es-AR"},
+            headers=headers,
+        )
+        logged_in = await client.post(
+            "/api/auth/login",
+            json={"email": "language-owner@example.com", "password": "correct horse battery staple"},
+        )
+    finally:
+        get_settings.cache_clear()
+
+    assert registered.status_code == 201
+    assert registration["language"] == "en-US"
+    assert profile.status_code == 200
+    assert profile.json()["language"] == "en-US"
+    assert updated.status_code == 200
+    assert updated.json()["language"] == "pt-BR"
+    assert invalid.status_code == 422
+    assert logged_in.status_code == 200
+    assert logged_in.json()["language"] == "pt-BR"
+
+
+@pytest.mark.anyio
 async def test_generic_telephony_adapter_is_idempotent(api_client):
     client, _ = api_client
     payload = {"provider_call_id": "generic-call-1", "flow_id": "demo-commerce"}
@@ -581,7 +631,7 @@ async def test_health_endpoints_and_security_headers(api_client):
     response = await client.get("/health/ready", headers={"X-Request-ID": "test-request-123"})
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ready", "version": "0.13.0"}
+    assert response.json() == {"status": "ready", "version": "0.14.0"}
     assert response.headers["x-request-id"] == "test-request-123"
     assert response.headers["x-content-type-options"] == "nosniff"
     assert response.headers["x-frame-options"] == "DENY"
