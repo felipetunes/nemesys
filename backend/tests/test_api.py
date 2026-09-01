@@ -477,13 +477,111 @@ async def test_workspace_roles_and_audit_log_are_enforced(api_client, monkeypatc
 
 
 @pytest.mark.anyio
+async def test_user_administration_and_agent_identity_are_enforced(api_client, monkeypatch):
+    client, _ = api_client
+    monkeypatch.setenv("AUTH_REQUIRED", "true")
+    get_settings.cache_clear()
+    try:
+        owner_registration = await client.post(
+            "/api/auth/register",
+            json={
+                "email": "admin@example.com",
+                "password": "correct horse battery staple",
+                "workspace_name": "Agent Support",
+            },
+        )
+        owner = owner_registration.json()
+        workspace_id = owner["workspaces"][0]["id"]
+        owner_headers = {
+            "Authorization": f"Bearer {owner['token']}",
+            "X-Workspace-ID": workspace_id,
+        }
+        created_agent = await client.post(
+            "/api/workspaces/users",
+            json={
+                "email": "agent@example.com",
+                "password": "temporary agent password",
+                "role": "editor",
+            },
+            headers=owner_headers,
+        )
+        members = await client.get("/api/workspaces/members", headers=owner_headers)
+        agent_login = await client.post(
+            "/api/auth/login",
+            json={"email": "agent@example.com", "password": "temporary agent password"},
+        )
+        agent = agent_login.json()
+        agent_headers = {
+            "Authorization": f"Bearer {agent['token']}",
+            "X-Workspace-ID": workspace_id,
+        }
+        own_presence = await client.put(
+            "/api/agents/agent@example.com/presence",
+            json={"presence": "on_queue"},
+            headers=agent_headers,
+        )
+        impersonation = await client.put(
+            "/api/agents/another-agent/presence",
+            json={"presence": "on_queue"},
+            headers=agent_headers,
+        )
+        owner_impersonation = await client.put(
+            "/api/agents/agent@example.com/presence",
+            json={"presence": "available"},
+            headers=owner_headers,
+        )
+        agent_id = created_agent.json()["user_id"]
+        deactivated = await client.patch(
+            f"/api/workspaces/members/{agent_id}/status",
+            json={"active": False},
+            headers=owner_headers,
+        )
+        blocked_token = await client.get("/api/flows", headers=agent_headers)
+        blocked_login = await client.post(
+            "/api/auth/login",
+            json={"email": "agent@example.com", "password": "temporary agent password"},
+        )
+        reactivated = await client.patch(
+            f"/api/workspaces/members/{agent_id}/status",
+            json={"active": True},
+            headers=owner_headers,
+        )
+        revoked_token = await client.get("/api/flows", headers=agent_headers)
+        last_owner_deactivation = await client.patch(
+            f"/api/workspaces/members/{owner['user_id']}/status",
+            json={"active": False},
+            headers=owner_headers,
+        )
+    finally:
+        get_settings.cache_clear()
+
+    assert owner_registration.status_code == 201
+    assert created_agent.status_code == 201
+    assert created_agent.json()["active"] is True
+    assert {member["email"] for member in members.json()} == {"admin@example.com", "agent@example.com"}
+    assert agent_login.status_code == 200
+    assert own_presence.status_code == 200
+    assert own_presence.json()["agent_name"] == "agent@example.com"
+    assert impersonation.status_code == 403
+    assert owner_impersonation.status_code == 403
+    assert deactivated.status_code == 200
+    assert deactivated.json()["active"] is False
+    assert blocked_token.status_code == 401
+    assert blocked_login.status_code == 401
+    assert reactivated.status_code == 200
+    assert reactivated.json()["active"] is True
+    assert revoked_token.status_code == 401
+    assert last_owner_deactivation.status_code == 409
+
+
+@pytest.mark.anyio
 async def test_health_endpoints_and_security_headers(api_client):
     client, _ = api_client
 
     response = await client.get("/health/ready", headers={"X-Request-ID": "test-request-123"})
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ready", "version": "0.9.0"}
+    assert response.json() == {"status": "ready", "version": "0.10.0"}
     assert response.headers["x-request-id"] == "test-request-123"
     assert response.headers["x-content-type-options"] == "nosniff"
     assert response.headers["x-frame-options"] == "DENY"

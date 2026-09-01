@@ -3,6 +3,7 @@ export type NodeKind = 'start' | 'prompt' | 'collect_input' | 'ai_intent' | 'dec
 export type AgentPresence = 'offline' | 'available' | 'away' | 'busy' | 'on_queue'
 export type AgentRoutingStatus = 'off_queue' | 'idle' | 'interacting' | 'not_responding'
 export type WrapUpCode = 'resolved' | 'transferred' | 'callback_requested' | 'no_response' | 'other'
+export type WorkspaceRole = 'viewer' | 'editor' | 'admin' | 'owner'
 
 export interface FlowNode {
   id: string
@@ -99,7 +100,23 @@ export interface MetricsSummary {
 export interface WorkspaceInfo {
   id: string
   name: string
-  role: 'viewer' | 'editor' | 'admin' | 'owner'
+  role: WorkspaceRole
+}
+
+export interface WorkspaceMember {
+  user_id: string
+  email: string
+  role: WorkspaceRole
+  active: boolean
+  last_login_at?: string | null
+  created_at: string
+}
+
+export interface AuthMe {
+  user_id: string
+  email: string
+  active_workspace_id: string
+  workspaces: WorkspaceInfo[]
 }
 
 export interface AuthTokenResponse {

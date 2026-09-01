@@ -80,3 +80,12 @@ def require_workspace_role(minimum_role: RoleRequirement) -> Callable[..., Works
 require_viewer_access = require_workspace_role("viewer")
 require_editor_access = require_workspace_role("editor")
 require_admin_access = require_workspace_role("admin")
+
+
+def resolve_agent_identity(access: WorkspaceAccess, requested_name: str) -> str:
+    normalized_name = requested_name.strip()
+    if access.user_id is None:
+        return normalized_name
+    if access.email and normalized_name.casefold() == access.email.casefold():
+        return access.email
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Agents can only operate as their own user")

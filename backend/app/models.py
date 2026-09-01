@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
@@ -318,6 +318,9 @@ class WorkspaceMember(StrictModel):
     user_id: str
     email: str
     role: WorkspaceRole
+    active: bool
+    last_login_at: datetime | None = None
+    created_at: datetime
 
 
 class WorkspaceMemberCreate(StrictModel):
@@ -325,8 +328,18 @@ class WorkspaceMemberCreate(StrictModel):
     role: WorkspaceRole = "viewer"
 
 
+class WorkspaceUserCreate(StrictModel):
+    email: str = Field(min_length=5, max_length=320, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+    password: str = Field(min_length=12, max_length=200)
+    role: WorkspaceRole = "editor"
+
+
 class WorkspaceMemberRoleUpdate(StrictModel):
     role: WorkspaceRole
+
+
+class WorkspaceMemberStatusUpdate(StrictModel):
+    active: bool
 
 
 class AuthTokenResponse(StrictModel):
@@ -370,6 +383,7 @@ class WorkspaceMembershipRow(Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
     workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"), primary_key=True)
     role: Mapped[str] = mapped_column(String(30), default="owner")
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
 class AuthSessionRow(Base):

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.core.auth import WorkspaceAccess, require_editor_access, require_viewer_access
+from app.core.auth import WorkspaceAccess, require_editor_access, require_viewer_access, resolve_agent_identity
 from app.core.db import get_db
 from app.models import AgentPresenceUpdate, AgentState
 from app.services.agent_repository import AgentRepository
@@ -25,7 +25,7 @@ def update_agent_presence(
     access: WorkspaceAccess = Depends(require_editor_access),
     db: Session = Depends(get_db),
 ) -> AgentState:
-    normalized_name = agent_name.strip()
+    normalized_name = resolve_agent_identity(access, agent_name)
     if not normalized_name or len(normalized_name) > 120:
         raise HTTPException(status_code=422, detail="Agent name must contain 1 to 120 visible characters")
     state = AgentRepository(db, access.workspace_id).set_presence(normalized_name, payload.presence)

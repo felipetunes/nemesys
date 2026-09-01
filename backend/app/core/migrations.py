@@ -28,10 +28,12 @@ def upgrade_database(engine: Engine, database_url: str) -> None:
                 revision = "20260901_0003"
             else:
                 session_columns = {column["name"] for column in inspector.get_columns("sessions")}
-                revision = (
-                    "head"
-                    if "agent_states" in tables and "assigned_agent" in session_columns
-                    else "20260901_0004"
-                )
+                if "agent_states" not in tables or "assigned_agent" not in session_columns:
+                    revision = "20260901_0004"
+                else:
+                    membership_columns = {
+                        column["name"] for column in inspector.get_columns("workspace_memberships")
+                    }
+                    revision = "head" if "active" in membership_columns else "20260901_0005"
         command.stamp(config, revision)
     command.upgrade(config, "head")

@@ -4,7 +4,7 @@
 [![Release](https://img.shields.io/github/v/release/felipetunes/nemesys)](https://github.com/felipetunes/nemesys/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-7c5cff.svg)](LICENSE)
 
-**Current project version: `0.9.0` — flow outcomes and agent operations**
+**Current project version: `0.10.0` — user administration and agent desktop**
 
 **A visual, AI-assisted IVR flow builder and runtime for learning, prototyping and portfolio demos.**
 
@@ -45,7 +45,7 @@ Traditional IVRs are often built inside proprietary platforms. Nemesys exposes t
 - timestamped generic webhooks with replay-window enforcement;
 - dependency vulnerability checks in CI and weekly automated update proposals;
 - a Brazilian Portuguese interface by default, with an in-app `PT-BR` / `EN-US` selector;
-- distinct **Architect** and **Collaborate** product areas;
+- distinct **Architect**, **Collaborate** and **Administration** product areas;
 - a Collaborate queue workspace where agents can inspect and claim waiting sessions;
 - a persistent Architect catalog for creating, selecting and evolving multiple IVRs;
 - contextual descriptions for every node type in the palette and flow canvas;
@@ -54,13 +54,17 @@ Traditional IVRs are often built inside proprietary platforms. Nemesys exposes t
 - provider-neutral flow outcomes with success/failure tracking and metrics;
 - persistent agent presence and routing status;
 - assigned-interaction handling and traceable after-call work with wrap-up codes.
+- workspace user creation, roles, activation and removal from a dedicated administration area;
+- an authenticated, customer-centered agent desktop with inbox, journey context and wrap-up controls;
+- server-side agent identity enforcement that prevents an authenticated user from acting as another agent.
 
 ## Product areas and languages
 
 Nemesys separates design-time and operational responsibilities while keeping one provider-neutral runtime:
 
 - **Architect** contains the multi-IVR catalog, visual flow editor, browser simulator, version history and runtime architecture view.
-- **Collaborate** contains operational metrics, persistent agent availability, live queues, assigned interactions and after-call work.
+- **Collaborate** contains operational metrics and a customer-centered agent desktop with presence, routing status, inbox, journey context and after-call work.
+- **Administration** contains workspace user creation, role assignment, activation/deactivation and member removal.
 
 The interface starts in Brazilian Portuguese (`pt-BR`). Use the language selector in the top bar to switch to English (`en-US`); the selection is saved locally in the browser.
 
@@ -223,7 +227,9 @@ GET    /api/auth/me
 POST   /api/auth/logout
 GET    /api/workspaces/members
 POST   /api/workspaces/members
+POST   /api/workspaces/users
 PATCH  /api/workspaces/members/{user_id}
+PATCH  /api/workspaces/members/{user_id}/status
 DELETE /api/workspaces/members/{user_id}
 POST   /api/sessions
 GET    /api/sessions/{session_id}
@@ -271,7 +277,9 @@ See [`docs/architecture.md`](docs/architecture.md), [`docs/flow-spec.md`](docs/f
 
 Set `AUTH_REQUIRED=true` to require user or admin bearer tokens. The first registered account becomes the owner of a new isolated workspace; later public registration follows `ALLOW_REGISTRATION`. Tokens are revocable and expire according to `AUTH_SESSION_DAYS`. Leave authentication disabled for the fully offline demo.
 
-Workspace roles are enforced server-side: viewers can inspect, editors can modify flows and operate simulations, and admins/owners can manage members, permanently delete eligible archived flows, run retention and inspect the audit log. Ownership changes remain owner-only and the last owner cannot be removed. Repeated failed logins are temporarily locked according to `AUTH_MAX_FAILED_ATTEMPTS` and `AUTH_LOCKOUT_MINUTES`.
+Workspace roles are enforced server-side: viewers can inspect, editors can modify flows and operate simulations, and admins/owners can create accounts, manage memberships, permanently delete eligible archived flows, run retention and inspect the audit log. The Administration application is shown only to admins and owners. Memberships can be deactivated without deleting the user; deactivation immediately revokes existing sessions and workspace access. Ownership changes remain owner-only and the last active owner cannot be removed or deactivated. Repeated failed logins are temporarily locked according to `AUTH_MAX_FAILED_ATTEMPTS` and `AUTH_LOCKOUT_MINUTES`.
+
+When authentication is enabled, Collaborate binds agent operations to the signed-in user's email, so one agent cannot claim work or change presence as another. Manual agent names remain available only in offline demo mode.
 
 The editor's **Access** dialog supports registration and login and stores its token only for the current browser tab. `ADMIN_API_KEY` remains available as a bootstrap/operator credential.
 
@@ -304,6 +312,8 @@ Each GitHub release publishes versioned public images to `ghcr.io/felipetunes/ne
 - [x] Export/import flow JSON
 - [x] IVR archive, restore, duplication and protected deletion
 - [x] Visual version comparison and draft rollback
+- [x] Workspace user administration and membership activation
+- [x] Customer-centered agent desktop with authenticated identity
 
 ## Security notes
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import {
   Activity,
   BarChart3,
@@ -14,6 +14,7 @@ import {
   Network,
   PlayCircle,
   Save,
+  ShieldCheck,
   UsersRound,
   Workflow,
 } from 'lucide-react'
@@ -27,19 +28,20 @@ import Simulator from './components/Simulator'
 import VersionHistory from './components/VersionHistory'
 import { createFlowId, createStarterFlow } from './flowFactory'
 import { useI18n, type Language } from './i18n'
-import type { FlowDefinition } from './types'
+import type { AuthMe, FlowDefinition } from './types'
 import { validationErrorMessage, validationSuccessMessage } from './validation'
 
-type Application = 'architect' | 'collaborate'
+type Application = 'architect' | 'collaborate' | 'admin'
 type ArchitectTab = 'ivrs' | 'editor' | 'simulator' | 'history' | 'architecture'
 type CollaborateTab = 'overview' | 'queue'
 
 const APPLICATION_STORAGE_KEY = 'nemesys_application'
 const SELECTED_FLOW_STORAGE_KEY = 'nemesys_selected_flow'
+const UserManagement = lazy(() => import('./components/UserManagement'))
 
 function initialApplication(): Application {
   const stored = window.localStorage.getItem(APPLICATION_STORAGE_KEY)
-  return stored === 'collaborate' ? 'collaborate' : 'architect'
+  return stored === 'collaborate' || stored === 'admin' ? stored : 'architect'
 }
 
 export default function App() {
@@ -62,6 +64,8 @@ export default function App() {
   const [actionError, setActionError] = useState('')
   const [flowError, setFlowError] = useState('')
   const [hasManagementToken, setHasManagementToken] = useState(() => Boolean(window.sessionStorage.getItem('nemesys_management_token')))
+  const [currentUser, setCurrentUser] = useState<AuthMe | null>(null)
+  const [accessChecked, setAccessChecked] = useState(false)
   const [accessRevision, setAccessRevision] = useState(0)
   const [showAccess, setShowAccess] = useState(false)
 
@@ -92,6 +96,19 @@ export default function App() {
       .finally(() => { if (active) setFlowLoading(false) })
     return () => { active = false }
   }, [accessRevision])
+
+  useEffect(() => {
+    let active = true
+    api.me()
+      .then(user => { if (active) setCurrentUser(user) })
+      .catch(() => { if (active) setCurrentUser(null) })
+      .finally(() => { if (active) setAccessChecked(true) })
+    return () => { active = false }
+  }, [accessRevision])
+
+  const activeRole = currentUser?.workspaces.find(item => item.id === currentUser.active_workspace_id)?.role
+  const canAdminister = activeRole === 'admin' || activeRole === 'owner'
+  const visibleApplication = accessChecked && application === 'admin' && !canAdminister ? 'architect' : application
 
   const setApplication = (nextApplication: Application) => {
     window.localStorage.setItem(APPLICATION_STORAGE_KEY, nextApplication)
@@ -298,6 +315,8 @@ export default function App() {
 
   const refreshAccess = () => {
     setHasManagementToken(Boolean(window.sessionStorage.getItem('nemesys_management_token')))
+    setCurrentUser(null)
+    setAccessChecked(false)
     setFlows([])
     setFlow(null)
     setHistoryFlow(null)
@@ -324,14 +343,18 @@ export default function App() {
           </div>
 
           <div className="app-switcher" role="group" aria-label={t('actions.applications')}>
-            <button className={application === 'architect' ? 'active' : ''} onClick={() => setApplication('architect')}>
+            <button className={visibleApplication === 'architect' ? 'active' : ''} onClick={() => setApplication('architect')}>
               <Workflow size={18} />
               <span><strong>{t('app.architect')}</strong><small>{t('app.architect.description')}</small></span>
             </button>
-            <button className={application === 'collaborate' ? 'active' : ''} onClick={() => setApplication('collaborate')}>
+            <button className={visibleApplication === 'collaborate' ? 'active' : ''} onClick={() => setApplication('collaborate')}>
               <UsersRound size={18} />
               <span><strong>{t('app.collaborate')}</strong><small>{t('app.collaborate.description')}</small></span>
             </button>
+            {canAdminister && <button className={visibleApplication === 'admin' ? 'active' : ''} onClick={() => setApplication('admin')}>
+              <ShieldCheck size={18} />
+              <span><strong>{t('app.admin')}</strong><small>{t('app.admin.description')}</small></span>
+            </button>}
           </div>
 
           <div className="topbar-actions">
@@ -348,13 +371,13 @@ export default function App() {
 
         <div className="contextbar">
           <div className="context-title">
-            {application === 'architect' ? <Workflow size={18} /> : <UsersRound size={18} />}
+            {visibleApplication === 'architect' ? <Workflow size={18} /> : visibleApplication === 'collaborate' ? <UsersRound size={18} /> : <ShieldCheck size={18} />}
             <div>
-              <strong>{application === 'architect' ? t('app.architect') : t('app.collaborate')}</strong>
-              <span>{application === 'architect' ? t('app.architect.description') : t('app.collaborate.description')}</span>
+              <strong>{visibleApplication === 'architect' ? t('app.architect') : visibleApplication === 'collaborate' ? t('app.collaborate') : t('app.admin')}</strong>
+              <span>{visibleApplication === 'architect' ? t('app.architect.description') : visibleApplication === 'collaborate' ? t('app.collaborate.description') : t('app.admin.description')}</span>
             </div>
           </div>
-          {application === 'architect' ? (
+          {visibleApplication === 'architect' ? (
             <nav className="section-nav" aria-label={t('app.architect')}>
               <button className={architectTab === 'ivrs' ? 'active' : ''} onClick={() => setArchitectTab('ivrs')}><ListTree size={16} />{t('nav.ivrs')}</button>
               <button className={architectTab === 'editor' ? 'active' : ''} onClick={() => setArchitectTab('editor')}><GitBranch size={16} />{t('nav.editor')}</button>
@@ -362,10 +385,14 @@ export default function App() {
               <button className={architectTab === 'history' ? 'active' : ''} onClick={() => setArchitectTab('history')}><History size={16} />{t('nav.history')}</button>
               <button className={architectTab === 'architecture' ? 'active' : ''} onClick={() => setArchitectTab('architecture')}><Activity size={16} />{t('nav.architecture')}</button>
             </nav>
-          ) : (
+          ) : visibleApplication === 'collaborate' ? (
             <nav className="section-nav" aria-label={t('app.collaborate')}>
               <button className={collaborateTab === 'overview' ? 'active' : ''} onClick={() => setCollaborateTab('overview')}><BarChart3 size={16} />{t('nav.overview')}</button>
               <button className={collaborateTab === 'queue' ? 'active' : ''} onClick={() => setCollaborateTab('queue')}><Headphones size={16} />{t('nav.queue')}</button>
+            </nav>
+          ) : (
+            <nav className="section-nav" aria-label={t('app.admin')}>
+              <button className="active"><UsersRound size={16} />{t('nav.users')}</button>
             </nav>
           )}
         </div>
@@ -375,7 +402,7 @@ export default function App() {
         {notice && <div className="toast"><Save size={15} />{notice}</div>}
         {actionError && <div className="error-box top-error">{actionError}</div>}
 
-        {application === 'architect' && <>
+        {visibleApplication === 'architect' && <>
           {flowError && <div className="error-box top-error">{flowError}</div>}
           {flowLoading && <div className="loading"><LoaderCircle className="spin" />{t('app.loadingFlow')}</div>}
           {!flowLoading && architectTab === 'ivrs' && <FlowCatalog flows={flows} selectedFlowId={flow?.id ?? null} creating={creatingFlow} busyFlowId={busyFlowId} onCreate={createFlow} onOpen={openFlow} onHistory={openHistory} onDuplicate={duplicateFlow} onArchive={archiveFlow} onRestore={restoreFlow} onDelete={deleteFlow} />}
@@ -385,10 +412,12 @@ export default function App() {
           {!flowLoading && architectTab === 'architecture' && <Architecture />}
         </>}
 
-        {application === 'collaborate' && <>
+        {visibleApplication === 'collaborate' && <>
           {collaborateTab === 'overview' && <MetricsDashboard />}
           {collaborateTab === 'queue' && <CollaborateQueue />}
         </>}
+
+        {visibleApplication === 'admin' && <Suspense fallback={<div className="loading"><LoaderCircle className="spin" />{t('users.loading')}</div>}><UserManagement key={accessRevision} /></Suspense>}
       </main>
       {showAccess && <AccessDialog configured={hasManagementToken} onClose={() => setShowAccess(false)} onAuthenticated={refreshAccess} onClear={clearAccess} />}
     </div>

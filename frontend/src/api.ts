@@ -1,4 +1,4 @@
-import type { AgentPresence, AgentState, AuthTokenResponse, CallSession, FlowDefinition, FlowValidationResult, MetricsSummary, WrapUpCode } from './types'
+import type { AgentPresence, AgentState, AuthMe, AuthTokenResponse, CallSession, FlowDefinition, FlowValidationResult, MetricsSummary, WorkspaceMember, WorkspaceRole, WrapUpCode } from './types'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
@@ -52,6 +52,12 @@ export const api = {
   completeWrapUp: (sessionId: string, code: WrapUpCode, notes: string) => request<CallSession>(`/api/queue/${sessionId}/wrap-up`, { method: 'POST', body: JSON.stringify({ code, notes }) }),
   listAgentStates: () => request<AgentState[]>('/api/agents'),
   updateAgentPresence: (agentName: string, presence: AgentPresence) => request<AgentState>(`/api/agents/${encodeURIComponent(agentName)}/presence`, { method: 'PUT', body: JSON.stringify({ presence }) }),
+  me: () => request<AuthMe>('/api/auth/me'),
+  listWorkspaceMembers: () => request<WorkspaceMember[]>('/api/workspaces/members'),
+  createWorkspaceUser: (email: string, password: string, role: WorkspaceRole) => request<WorkspaceMember>('/api/workspaces/users', { method: 'POST', body: JSON.stringify({ email, password, role }) }),
+  updateWorkspaceMemberRole: (userId: string, role: WorkspaceRole) => request<WorkspaceMember>(`/api/workspaces/members/${userId}`, { method: 'PATCH', body: JSON.stringify({ role }) }),
+  updateWorkspaceMemberStatus: (userId: string, active: boolean) => request<WorkspaceMember>(`/api/workspaces/members/${userId}/status`, { method: 'PATCH', body: JSON.stringify({ active }) }),
+  removeWorkspaceMember: (userId: string) => request<void>(`/api/workspaces/members/${userId}`, { method: 'DELETE' }),
   login: (email: string, password: string) => request<AuthTokenResponse>('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
   register: (email: string, password: string, workspaceName: string) => request<AuthTokenResponse>('/api/auth/register', { method: 'POST', body: JSON.stringify({ email, password, workspace_name: workspaceName }) }),
 }

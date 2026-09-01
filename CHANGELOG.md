@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.10.0 — 2026-09-01
+
+### Added
+
+- Dedicated Administration application for creating workspace users, assigning roles and activating, deactivating or removing memberships.
+- Customer-centered Collaborate agent desktop with interaction inbox, customer context, recent journey events and after-call work.
+- Workspace-user creation and membership-status APIs with audit events and Alembic-managed active membership state.
+- End-to-end API coverage for the user lifecycle and authenticated agent identity.
+
+### Changed
+
+- Authenticated presence, assignment and claim operations are now bound to the signed-in user's email to prevent agent impersonation.
+- Inactive memberships immediately lose workspace access, revoke existing sessions and cannot sign in to an account without another active workspace.
+- Manual agent identity remains available for the authentication-free offline demo.
+
 ## 0.9.0 — 2026-09-01
 
 ### Added

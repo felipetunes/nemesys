@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.core.auth import WorkspaceAccess, require_editor_access, require_viewer_access
+from app.core.auth import WorkspaceAccess, require_editor_access, require_viewer_access, resolve_agent_identity
 from app.core.db import get_db
 from app.engine.runtime import FlowEngine, FlowEngineError
 from app.models import CallSession, QueueClaim, QueueWrapUp
@@ -28,7 +28,7 @@ def list_assigned_sessions(
     access: WorkspaceAccess = Depends(require_viewer_access),
     db: Session = Depends(get_db),
 ) -> list[CallSession]:
-    return SessionRepository(db, access.workspace_id).list_assigned(agent_name.strip())
+    return SessionRepository(db, access.workspace_id).list_assigned(resolve_agent_identity(access, agent_name))
 
 
 @router.post("/{session_id}/claim", response_model=CallSession)
@@ -40,7 +40,8 @@ def claim_queued_session(
 ) -> CallSession:
     session_repo = SessionRepository(db, access.workspace_id)
     agent_repo = AgentRepository(db, access.workspace_id)
-    agent = agent_repo.get(payload.agent_name)
+    agent_name = resolve_agent_identity(access, payload.agent_name)
+    agent = agent_repo.get(agent_name)
     if agent is None or agent.presence != "on_queue":
         raise HTTPException(status_code=409, detail="Agent must be on queue before claiming a session")
     if agent.routing_status != "idle":
@@ -53,15 +54,15 @@ def claim_queued_session(
         raise HTTPException(status_code=409, detail="Session flow version no longer exists")
     expected_revision = session.revision
     try:
-        engine.connect_agent(flow, session, payload.agent_name)
+        engine.connect_agent(flow, session, agent_name)
         saved = session_repo.save(session, expected_revision=expected_revision)
-        agent_repo.set_routing_status(payload.agent_name, "interacting")
+        agent_repo.set_routing_status(agent_name, "interacting")
         AuditService(db, access.workspace_id).record(
             actor=access.email or access.user_id or "admin",
             action="queue.session_claimed",
             resource_type="session",
             resource_id=session_id,
-            details={"agent_name": payload.agent_name},
+            details={"agent_name": agent_name},
         )
         return saved
     except FlowEngineError as exc:
