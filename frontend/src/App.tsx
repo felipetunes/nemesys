@@ -6,6 +6,7 @@ import {
   Cable,
   GitBranch,
   Headphones,
+  History,
   KeyRound,
   Languages,
   ListTree,
@@ -23,13 +24,14 @@ import FlowCatalog from './components/FlowCatalog'
 import FlowEditor from './components/FlowEditor'
 import MetricsDashboard from './components/MetricsDashboard'
 import Simulator from './components/Simulator'
+import VersionHistory from './components/VersionHistory'
 import { createFlowId, createStarterFlow } from './flowFactory'
 import { useI18n, type Language } from './i18n'
 import type { FlowDefinition } from './types'
 import { validationErrorMessage, validationSuccessMessage } from './validation'
 
 type Application = 'architect' | 'collaborate'
-type ArchitectTab = 'ivrs' | 'editor' | 'simulator' | 'architecture'
+type ArchitectTab = 'ivrs' | 'editor' | 'simulator' | 'history' | 'architecture'
 type CollaborateTab = 'overview' | 'queue'
 
 const APPLICATION_STORAGE_KEY = 'nemesys_application'
@@ -44,6 +46,7 @@ export default function App() {
   const { language, setLanguage, t } = useI18n()
   const [flows, setFlows] = useState<FlowDefinition[]>([])
   const [flow, setFlow] = useState<FlowDefinition | null>(null)
+  const [historyFlow, setHistoryFlow] = useState<FlowDefinition | null>(null)
   const [application, setApplicationState] = useState<Application>(initialApplication)
   const [architectTab, setArchitectTab] = useState<ArchitectTab>('ivrs')
   const [collaborateTab, setCollaborateTab] = useState<CollaborateTab>('overview')
@@ -52,6 +55,8 @@ export default function App() {
   const [publishing, setPublishing] = useState(false)
   const [importing, setImporting] = useState(false)
   const [creatingFlow, setCreatingFlow] = useState(false)
+  const [busyFlowId, setBusyFlowId] = useState<string | null>(null)
+  const [restoringVersion, setRestoringVersion] = useState(false)
   const [publishedVersion, setPublishedVersion] = useState<number | null>(null)
   const [notice, setNotice] = useState('')
   const [actionError, setActionError] = useState('')
@@ -62,21 +67,24 @@ export default function App() {
 
   useEffect(() => {
     let active = true
-    api.listFlows()
+    api.listFlows(true)
       .then(async drafts => {
         if (!active) return
         setFlows(drafts)
         setFlowError('')
-        if (drafts.length === 0) {
+        const activeDrafts = drafts.filter(item => !item.archived_at)
+        if (activeDrafts.length === 0) {
           setFlow(null)
+          setHistoryFlow(null)
           setPublishedVersion(null)
           return
         }
         const preferredId = window.localStorage.getItem(SELECTED_FLOW_STORAGE_KEY)
-        const draft = drafts.find(item => item.id === preferredId) || drafts[0]
+        const draft = activeDrafts.find(item => item.id === preferredId) || activeDrafts[0]
         const versions = await api.getFlowVersions(draft.id)
         if (!active) return
         setFlow(draft)
+        setHistoryFlow(draft)
         setPublishedVersion(versions[0]?.version ?? null)
         window.localStorage.setItem(SELECTED_FLOW_STORAGE_KEY, draft.id)
       })
@@ -101,6 +109,7 @@ export default function App() {
     try {
       const versions = await api.getFlowVersions(nextFlow.id)
       setFlow(nextFlow)
+      setHistoryFlow(nextFlow)
       setPublishedVersion(versions[0]?.version ?? null)
       window.localStorage.setItem(SELECTED_FLOW_STORAGE_KEY, nextFlow.id)
       setArchitectTab('editor')
@@ -109,6 +118,12 @@ export default function App() {
     } finally {
       setFlowLoading(false)
     }
+  }
+
+  const openHistory = async (nextFlow: FlowDefinition) => {
+    setHistoryFlow(nextFlow)
+    setActionError('')
+    setArchitectTab('history')
   }
 
   const createFlow = async (name: string, description: string) => {
@@ -121,6 +136,7 @@ export default function App() {
       })
       const created = await api.importFlow(starter, false)
       setFlows(current => [...current.filter(item => item.id !== created.id), created])
+      setHistoryFlow(created)
       showNotice(t('notice.flowCreated', { name: created.name }))
       await openFlow(created)
     } catch (error) {
@@ -138,6 +154,7 @@ export default function App() {
       if (!validation.valid) throw new Error(validationErrorMessage(validation))
       const saved = await api.saveFlow(next)
       setFlow(saved)
+      setHistoryFlow(saved)
       setFlows(current => current.map(item => item.id === saved.id ? saved : item))
       showNotice(validationSuccessMessage(validation, t('notice.draftSaved'), count => t('validation.warningCount', { count })))
     }
@@ -152,6 +169,7 @@ export default function App() {
       if (!validation.valid) throw new Error(validationErrorMessage(validation))
       const saved = await api.saveFlow(next)
       setFlow(saved)
+      setHistoryFlow(saved)
       setFlows(current => current.map(item => item.id === saved.id ? saved : item))
       const published = await api.publishFlow(saved.id)
       setPublishedVersion(published.version ?? null)
@@ -165,9 +183,92 @@ export default function App() {
     finally { setPublishing(false) }
   }
 
+  const duplicateFlow = async (source: FlowDefinition) => {
+    setBusyFlowId(source.id); setActionError('')
+    try {
+      const name = t('catalog.copyName', { name: source.name })
+      const duplicate = await api.duplicateFlow(source.id, createFlowId(name), name, source.description)
+      setFlows(current => [...current, duplicate])
+      showNotice(t('notice.flowDuplicated', { name: duplicate.name }))
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setBusyFlowId(null)
+    }
+  }
+
+  const archiveFlow = async (target: FlowDefinition) => {
+    setBusyFlowId(target.id); setActionError('')
+    try {
+      const archived = await api.archiveFlow(target.id)
+      setFlows(current => current.map(item => item.id === archived.id ? archived : item))
+      setHistoryFlow(current => current?.id === archived.id ? archived : current)
+      if (flow?.id === archived.id) {
+        setFlow(null)
+        setPublishedVersion(null)
+        window.localStorage.removeItem(SELECTED_FLOW_STORAGE_KEY)
+      }
+      showNotice(t('notice.flowArchived', { name: archived.name }))
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setBusyFlowId(null)
+    }
+  }
+
+  const restoreFlow = async (target: FlowDefinition) => {
+    setBusyFlowId(target.id); setActionError('')
+    try {
+      const restored = await api.restoreFlow(target.id)
+      const versions = await api.getFlowVersions(restored.id)
+      setFlows(current => current.map(item => item.id === restored.id ? restored : item))
+      setFlow(restored)
+      setHistoryFlow(restored)
+      setPublishedVersion(versions[0]?.version ?? null)
+      window.localStorage.setItem(SELECTED_FLOW_STORAGE_KEY, restored.id)
+      showNotice(t('notice.flowRestored', { name: restored.name }))
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setBusyFlowId(null)
+    }
+  }
+
+  const deleteFlow = async (target: FlowDefinition) => {
+    setBusyFlowId(target.id); setActionError('')
+    try {
+      await api.deleteFlow(target.id)
+      setFlows(current => current.filter(item => item.id !== target.id))
+      setHistoryFlow(current => current?.id === target.id ? null : current)
+      showNotice(t('notice.flowDeleted', { name: target.name }))
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setBusyFlowId(null)
+    }
+  }
+
+  const restoreFlowVersion = async (version: number) => {
+    const target = historyFlow ?? flow
+    if (!target) return
+    setRestoringVersion(true); setActionError('')
+    try {
+      const restored = await api.restoreFlowVersion(target.id, version)
+      setFlows(current => current.map(item => item.id === restored.id ? restored : item))
+      setFlow(current => current?.id === restored.id ? restored : current)
+      setHistoryFlow(restored)
+      showNotice(t('notice.versionRestored', { version }))
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setRestoringVersion(false)
+    }
+  }
+
   const exportFlow = (current: FlowDefinition) => {
     const portable: FlowDefinition = { ...current, version: null, published_at: null }
     delete portable.updated_at
+    delete portable.archived_at
     const href = URL.createObjectURL(new Blob([JSON.stringify(portable, null, 2)], { type: 'application/json' }))
     const anchor = document.createElement('a')
     anchor.href = href
@@ -183,6 +284,7 @@ export default function App() {
       const parsed = JSON.parse(await file.text()) as FlowDefinition
       const imported = await api.importFlow(parsed, true)
       setFlow(imported)
+      setHistoryFlow(imported)
       setFlows(current => [...current.filter(item => item.id !== imported.id), imported])
       const versions = await api.getFlowVersions(imported.id)
       setPublishedVersion(versions[0]?.version ?? null)
@@ -198,6 +300,7 @@ export default function App() {
     setHasManagementToken(Boolean(window.sessionStorage.getItem('nemesys_management_token')))
     setFlows([])
     setFlow(null)
+    setHistoryFlow(null)
     setFlowLoading(true)
     setFlowError('')
     setActionError('')
@@ -256,6 +359,7 @@ export default function App() {
               <button className={architectTab === 'ivrs' ? 'active' : ''} onClick={() => setArchitectTab('ivrs')}><ListTree size={16} />{t('nav.ivrs')}</button>
               <button className={architectTab === 'editor' ? 'active' : ''} onClick={() => setArchitectTab('editor')}><GitBranch size={16} />{t('nav.editor')}</button>
               <button className={architectTab === 'simulator' ? 'active' : ''} onClick={() => setArchitectTab('simulator')}><PlayCircle size={16} />{t('nav.simulator')}</button>
+              <button className={architectTab === 'history' ? 'active' : ''} onClick={() => setArchitectTab('history')}><History size={16} />{t('nav.history')}</button>
               <button className={architectTab === 'architecture' ? 'active' : ''} onClick={() => setArchitectTab('architecture')}><Activity size={16} />{t('nav.architecture')}</button>
             </nav>
           ) : (
@@ -274,9 +378,10 @@ export default function App() {
         {application === 'architect' && <>
           {flowError && <div className="error-box top-error">{flowError}</div>}
           {flowLoading && <div className="loading"><LoaderCircle className="spin" />{t('app.loadingFlow')}</div>}
-          {!flowLoading && architectTab === 'ivrs' && <FlowCatalog flows={flows} selectedFlowId={flow?.id ?? null} creating={creatingFlow} onCreate={createFlow} onOpen={openFlow} />}
+          {!flowLoading && architectTab === 'ivrs' && <FlowCatalog flows={flows} selectedFlowId={flow?.id ?? null} creating={creatingFlow} busyFlowId={busyFlowId} onCreate={createFlow} onOpen={openFlow} onHistory={openHistory} onDuplicate={duplicateFlow} onArchive={archiveFlow} onRestore={restoreFlow} onDelete={deleteFlow} />}
           {!flowLoading && architectTab === 'editor' && (flow ? <FlowEditor key={`${flow.id}:${flow.updated_at ?? ''}`} flow={flow} onSave={save} onPublish={publish} onExport={exportFlow} onImport={importFlow} saving={saving} publishing={publishing} importing={importing} publishedVersion={publishedVersion} /> : <FlowSelectionRequired onBack={() => setArchitectTab('ivrs')} />)}
           {!flowLoading && architectTab === 'simulator' && (flow ? <Simulator flow={flow} /> : <FlowSelectionRequired onBack={() => setArchitectTab('ivrs')} />)}
+          {!flowLoading && architectTab === 'history' && ((historyFlow ?? flow) ? <VersionHistory key={`${(historyFlow ?? flow)!.id}:${(historyFlow ?? flow)!.updated_at ?? ''}`} flow={(historyFlow ?? flow)!} restoring={restoringVersion} onRestore={restoreFlowVersion} /> : <FlowSelectionRequired onBack={() => setArchitectTab('ivrs')} />)}
           {!flowLoading && architectTab === 'architecture' && <Architecture />}
         </>}
 

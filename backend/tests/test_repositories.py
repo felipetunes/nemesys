@@ -45,6 +45,59 @@ def test_published_versions_are_immutable(db_factory):
     assert first_welcome.config.message != second_welcome.config.message
 
 
+def test_flow_lifecycle_preserves_versions_and_duplicates_only_the_draft(db_factory):
+    with db_factory() as db:
+        repo = FlowRepository(db)
+        draft = repo.save(build_demo_flow())
+        published = repo.publish(draft.id)
+        assert published is not None
+
+        duplicate = repo.duplicate(draft.id, "demo-copy", "Demo copy")
+        archived = repo.archive(draft.id)
+
+        assert duplicate is not None
+        assert duplicate.id == "demo-copy"
+        assert duplicate.name == "Demo copy"
+        assert duplicate.version is None
+        assert repo.list_versions(duplicate.id) == []
+        assert archived is not None
+        assert archived.archived_at is not None
+        assert [flow.id for flow in repo.list_drafts()] == ["demo-copy"]
+        assert {flow.id for flow in repo.list_drafts(include_archived=True)} == {
+            "demo-commerce",
+            "demo-copy",
+        }
+        assert repo.get_published(draft.id) is None
+        assert repo.get_version(draft.id, 1) is not None
+
+        restored = repo.restore(draft.id)
+        assert restored is not None
+        assert restored.archived_at is None
+        assert repo.get_published(draft.id) is not None
+
+
+def test_restore_version_replaces_draft_without_mutating_history(db_factory):
+    with db_factory() as db:
+        repo = FlowRepository(db)
+        original = repo.save(build_demo_flow())
+        version_one = repo.publish(original.id)
+        assert version_one is not None
+
+        changed = original.model_copy(update={"name": "Changed draft"})
+        repo.save(changed)
+        restored = repo.restore_version(original.id, 1)
+
+        assert restored is not None
+        assert restored.name == original.name
+        assert restored.version is None
+        persisted_version = repo.get_version(original.id, 1)
+        assert persisted_version is not None
+        assert persisted_version.name == version_one.name
+        assert persisted_version.nodes == version_one.nodes
+        assert persisted_version.edges == version_one.edges
+        assert persisted_version.version == version_one.version == 1
+
+
 def test_active_session_remains_pinned_to_original_flow_version(db_factory):
     engine = FlowEngine()
     with db_factory() as db:

@@ -26,17 +26,23 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const requestId = response.headers.get('X-Request-ID')
     throw new Error(requestId ? `${message} (request ${requestId})` : message)
   }
+  if (response.status === 204) return undefined as T
   return response.json() as Promise<T>
 }
 
 export const api = {
-  listFlows: () => request<FlowDefinition[]>('/api/flows'),
+  listFlows: (includeArchived = false) => request<FlowDefinition[]>(`/api/flows?include_archived=${includeArchived}`),
   getFlow: (id: string) => request<FlowDefinition>(`/api/flows/${id}`),
   getFlowVersions: (id: string) => request<FlowDefinition[]>(`/api/flows/${id}/versions`),
   validateFlow: (flow: FlowDefinition) => request<FlowValidationResult>('/api/flows/actions/validate', { method: 'POST', body: JSON.stringify(flow) }),
   importFlow: (flow: FlowDefinition, overwrite = false) => request<FlowDefinition>(`/api/flows/actions/import?overwrite=${overwrite}`, { method: 'POST', body: JSON.stringify(flow) }),
   saveFlow: (flow: FlowDefinition) => request<FlowDefinition>(`/api/flows/${flow.id}`, { method: 'PUT', body: JSON.stringify(flow) }),
   publishFlow: (id: string) => request<FlowDefinition>(`/api/flows/${id}/publish`, { method: 'POST' }),
+  duplicateFlow: (sourceId: string, id: string, name: string, description?: string) => request<FlowDefinition>(`/api/flows/${sourceId}/duplicate`, { method: 'POST', body: JSON.stringify({ id, name, description }) }),
+  archiveFlow: (id: string) => request<FlowDefinition>(`/api/flows/${id}/archive`, { method: 'POST' }),
+  restoreFlow: (id: string) => request<FlowDefinition>(`/api/flows/${id}/restore`, { method: 'POST' }),
+  deleteFlow: (id: string) => request<void>(`/api/flows/${id}`, { method: 'DELETE' }),
+  restoreFlowVersion: (id: string, version: number) => request<FlowDefinition>(`/api/flows/${id}/versions/${version}/restore`, { method: 'POST' }),
   createSession: (flowId: string) => request<CallSession>('/api/sessions', { method: 'POST', body: JSON.stringify({ flow_id: flowId }) }),
   submitInput: (sessionId: string, value: string) => request<CallSession>(`/api/sessions/${sessionId}/input`, { method: 'POST', body: JSON.stringify({ value }) }),
   getMetrics: () => request<MetricsSummary>('/api/operations/metrics'),

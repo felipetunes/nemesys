@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.8.0 — 2026-09-01
+
+### Added
+
+- Complete IVR lifecycle controls for duplication, archival, restoration and protected permanent deletion.
+- Architect version-history workspace with published-snapshot selection, structural draft comparison and rollback to draft.
+- Audited lifecycle and version-restore API operations plus an Alembic migration for archive metadata.
+- Frontend structural-diff tests and backend lifecycle, deletion-safety and rollback coverage.
+
+### Changed
+
+- Archived IVRs are separated from active catalog entries and cannot be saved, published or used to start new sessions.
+- Permanent deletion requires an admin or owner, prior archival and no linked session history.
+- Existing published versions and active sessions remain immutable when a draft is restored from history.
+
 ## 0.7.0 — 2026-09-01
 
 ### Added

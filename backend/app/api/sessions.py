@@ -20,6 +20,9 @@ def create_session(
     db: Session = Depends(get_db),
 ) -> CallSession:
     flow_repo = FlowRepository(db, access.workspace_id)
+    draft = flow_repo.get(payload.flow_id)
+    if draft is not None and draft.archived_at is not None:
+        raise HTTPException(status_code=409, detail="Archived flow cannot start new sessions")
     flow = (
         flow_repo.get_version(payload.flow_id, payload.flow_version)
         if payload.flow_version is not None

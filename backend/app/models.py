@@ -123,6 +123,21 @@ class FlowDefinition(StrictModel):
     version: int | None = Field(default=None, ge=1)
     published_at: datetime | None = None
     updated_at: datetime | None = None
+    archived_at: datetime | None = None
+
+
+class FlowDuplicateRequest(StrictModel):
+    id: FlowIdentifier
+    name: str = Field(min_length=2, max_length=200)
+    description: str | None = Field(default=None, max_length=4000)
+
+    @field_validator("name")
+    @classmethod
+    def normalize_name(cls, value: str) -> str:
+        normalized = value.strip()
+        if len(normalized) < 2:
+            raise ValueError("Flow name must contain at least two visible characters")
+        return normalized
 
 
 class FlowRow(Base):
@@ -133,6 +148,7 @@ class FlowRow(Base):
     description: Mapped[str] = mapped_column(Text, default="")
     definition_json: Mapped[str] = mapped_column(Text)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class FlowVersionRow(Base):

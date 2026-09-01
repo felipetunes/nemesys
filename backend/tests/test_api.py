@@ -141,6 +141,76 @@ async def test_flow_import_requires_explicit_overwrite(api_client):
 
 
 @pytest.mark.anyio
+async def test_flow_lifecycle_and_version_restore(api_client):
+    client, _ = api_client
+    original = (await client.get("/api/flows/demo-commerce")).json()
+    duplicate_payload = {
+        "id": "demo-commerce-copy",
+        "name": "Demo Commerce Copy",
+        "description": "Lifecycle test",
+    }
+
+    duplicate = await client.post("/api/flows/demo-commerce/duplicate", json=duplicate_payload)
+    archived = await client.post("/api/flows/demo-commerce/archive")
+    active = await client.get("/api/flows")
+    all_flows = await client.get("/api/flows?include_archived=true")
+    blocked_publish = await client.post("/api/flows/demo-commerce/publish")
+    blocked_session = await client.post("/api/sessions", json={"flow_id": "demo-commerce"})
+    restored = await client.post("/api/flows/demo-commerce/restore")
+
+    changed = restored.json()
+    changed["name"] = "Changed draft"
+    saved = await client.put("/api/flows/demo-commerce", json=changed)
+    restored_version = await client.post("/api/flows/demo-commerce/versions/1/restore")
+
+    assert duplicate.status_code == 201
+    assert duplicate.json()["id"] == "demo-commerce-copy"
+    assert duplicate.json()["version"] is None
+    assert archived.status_code == 200
+    assert archived.json()["archived_at"] is not None
+    assert {flow["id"] for flow in active.json()} == {"demo-commerce-copy"}
+    assert {flow["id"] for flow in all_flows.json()} == {"demo-commerce", "demo-commerce-copy"}
+    assert blocked_publish.status_code == 409
+    assert blocked_session.status_code == 409
+    assert saved.json()["name"] == "Changed draft"
+    assert restored_version.status_code == 200
+    assert restored_version.json()["name"] == original["name"]
+    assert restored_version.json()["version"] is None
+
+
+@pytest.mark.anyio
+async def test_permanent_flow_delete_requires_archive_and_no_session_history(api_client):
+    client, _ = api_client
+
+    active_delete = await client.delete("/api/flows/demo-commerce")
+    session = await client.post("/api/sessions", json={"flow_id": "demo-commerce"})
+    archived = await client.post("/api/flows/demo-commerce/archive")
+    protected_delete = await client.delete("/api/flows/demo-commerce")
+
+    assert active_delete.status_code == 409
+    assert session.status_code == 200
+    assert archived.status_code == 200
+    assert protected_delete.status_code == 409
+    assert "session history" in protected_delete.json()["detail"]
+
+
+@pytest.mark.anyio
+async def test_archived_flow_without_sessions_can_be_deleted(api_client):
+    client, _ = api_client
+    flow = build_demo_flow().model_copy(update={"id": "temporary-flow", "name": "Temporary flow"})
+
+    created = await client.post("/api/flows/actions/import", json=flow.model_dump(mode="json"))
+    archived = await client.post("/api/flows/temporary-flow/archive")
+    deleted = await client.delete("/api/flows/temporary-flow")
+    missing = await client.get("/api/flows/temporary-flow")
+
+    assert created.status_code == 201
+    assert archived.status_code == 200
+    assert deleted.status_code == 204
+    assert missing.status_code == 404
+
+
+@pytest.mark.anyio
 async def test_management_token_protects_flow_mutations(api_client, monkeypatch):
     client, _ = api_client
     draft = build_demo_flow().model_dump(mode="json")
@@ -392,7 +462,7 @@ async def test_health_endpoints_and_security_headers(api_client):
     response = await client.get("/health/ready", headers={"X-Request-ID": "test-request-123"})
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ready", "version": "0.7.0"}
+    assert response.json() == {"status": "ready", "version": "0.8.0"}
     assert response.headers["x-request-id"] == "test-request-123"
     assert response.headers["x-content-type-options"] == "nosniff"
     assert response.headers["x-frame-options"] == "DENY"

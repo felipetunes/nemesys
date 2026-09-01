@@ -26,6 +26,7 @@ export interface FlowDefinition {
   version?: number | null
   published_at?: string | null
   updated_at?: string
+  archived_at?: string | null
 }
 
 export interface ValidationIssue {

@@ -4,7 +4,7 @@
 [![Release](https://img.shields.io/github/v/release/felipetunes/nemesys)](https://github.com/felipetunes/nemesys/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-7c5cff.svg)](LICENSE)
 
-**Current project version: `0.7.0` — multi-IVR Architect catalog and contextual node help**
+**Current project version: `0.8.0` — safe IVR lifecycle and visual version history**
 
 **A visual, AI-assisted IVR flow builder and runtime for learning, prototyping and portfolio demos.**
 
@@ -48,13 +48,15 @@ Traditional IVRs are often built inside proprietary platforms. Nemesys exposes t
 - distinct **Architect** and **Collaborate** product areas;
 - a Collaborate queue workspace where agents can inspect and claim waiting sessions;
 - a persistent Architect catalog for creating, selecting and evolving multiple IVRs;
-- contextual descriptions for every node type in the palette and flow canvas.
+- contextual descriptions for every node type in the palette and flow canvas;
+- IVR duplication, archival, restoration and protected permanent deletion;
+- published-version comparison and rollback to the editable draft.
 
 ## Product areas and languages
 
 Nemesys separates design-time and operational responsibilities while keeping one provider-neutral runtime:
 
-- **Architect** contains the multi-IVR catalog, visual flow editor, browser simulator and runtime architecture view.
+- **Architect** contains the multi-IVR catalog, visual flow editor, browser simulator, version history and runtime architecture view.
 - **Collaborate** contains operational metrics and the live human-agent queue.
 
 The interface starts in Brazilian Portuguese (`pt-BR`). Use the language selector in the top bar to switch to English (`en-US`); the selection is saved locally in the browser.
@@ -207,6 +209,11 @@ GET    /api/flows/{flow_id}/export
 GET    /api/flows/{flow_id}/versions
 GET    /api/flows/{flow_id}/versions/{version}
 POST   /api/flows/{flow_id}/publish
+POST   /api/flows/{flow_id}/duplicate
+POST   /api/flows/{flow_id}/archive
+POST   /api/flows/{flow_id}/restore
+POST   /api/flows/{flow_id}/versions/{version}/restore
+DELETE /api/flows/{flow_id}
 POST   /api/auth/register
 POST   /api/auth/login
 GET    /api/auth/me
@@ -257,7 +264,7 @@ See [`docs/architecture.md`](docs/architecture.md), [`docs/flow-spec.md`](docs/f
 
 Set `AUTH_REQUIRED=true` to require user or admin bearer tokens. The first registered account becomes the owner of a new isolated workspace; later public registration follows `ALLOW_REGISTRATION`. Tokens are revocable and expire according to `AUTH_SESSION_DAYS`. Leave authentication disabled for the fully offline demo.
 
-Workspace roles are enforced server-side: viewers can inspect, editors can modify flows and operate simulations, and admins/owners can manage members, run retention and inspect the audit log. Ownership changes remain owner-only and the last owner cannot be removed. Repeated failed logins are temporarily locked according to `AUTH_MAX_FAILED_ATTEMPTS` and `AUTH_LOCKOUT_MINUTES`.
+Workspace roles are enforced server-side: viewers can inspect, editors can modify flows and operate simulations, and admins/owners can manage members, permanently delete eligible archived flows, run retention and inspect the audit log. Ownership changes remain owner-only and the last owner cannot be removed. Repeated failed logins are temporarily locked according to `AUTH_MAX_FAILED_ATTEMPTS` and `AUTH_LOCKOUT_MINUTES`.
 
 The editor's **Access** dialog supports registration and login and stores its token only for the current browser tab. `ADMIN_API_KEY` remains available as a bootstrap/operator credential.
 
@@ -288,6 +295,8 @@ Each GitHub release publishes versioned public images to `ghcr.io/felipetunes/ne
 - [x] Backend flow validation
 - [x] Flow validation UI
 - [x] Export/import flow JSON
+- [x] IVR archive, restore, duplication and protected deletion
+- [x] Visual version comparison and draft rollback
 
 ## Security notes
 
