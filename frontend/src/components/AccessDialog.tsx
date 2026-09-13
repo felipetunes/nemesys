@@ -1,5 +1,5 @@
-import { useState, type FormEvent } from 'react'
-import { KeyRound, LogIn, LogOut, Mail, Settings, ShieldCheck, UserPlus, X } from 'lucide-react'
+import { useRef, useState, type ChangeEvent, type FormEvent } from 'react'
+import { Camera, KeyRound, LogIn, LogOut, Mail, Settings, ShieldCheck, Trash2, UserPlus, UserRound, X } from 'lucide-react'
 import { api } from '../api'
 import { setAuthSession } from '../authStorage'
 import { useI18n, type Language, type TranslationKey } from '../i18n'
@@ -14,16 +14,96 @@ interface Props {
   onClear: () => void | Promise<void>
   onWorkspaceChange: (workspaceId: string) => void
   onLanguageChange: (language: Language) => void | Promise<void>
+  onAvatarChange: (avatarDataUrl: string | null) => Promise<void>
 }
 
-export default function AccessDialog({ configured, currentUser, ownerRegistrationAvailable, onClose, onAuthenticated, onClear, onWorkspaceChange, onLanguageChange }: Props) {
+const MAX_AVATAR_SOURCE_BYTES = 10 * 1024 * 1024
+const AVATAR_SIZE = 256
+const SUPPORTED_AVATAR_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
+
+function prepareAvatar(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (!SUPPORTED_AVATAR_TYPES.has(file.type)) {
+      reject(new Error('unsupported'))
+      return
+    }
+    if (file.size > MAX_AVATAR_SOURCE_BYTES) {
+      reject(new Error('too-large'))
+      return
+    }
+    const reader = new FileReader()
+    reader.onerror = () => reject(new Error('unreadable'))
+    reader.onload = () => {
+      const image = new Image()
+      image.onerror = () => reject(new Error('unreadable'))
+      image.onload = () => {
+        const canvas = document.createElement('canvas')
+        canvas.width = AVATAR_SIZE
+        canvas.height = AVATAR_SIZE
+        const context = canvas.getContext('2d')
+        if (!context) {
+          reject(new Error('unreadable'))
+          return
+        }
+        const side = Math.min(image.naturalWidth, image.naturalHeight)
+        context.drawImage(
+          image,
+          (image.naturalWidth - side) / 2,
+          (image.naturalHeight - side) / 2,
+          side,
+          side,
+          0,
+          0,
+          AVATAR_SIZE,
+          AVATAR_SIZE,
+        )
+        resolve(canvas.toDataURL('image/webp', 0.82))
+      }
+      image.src = String(reader.result)
+    }
+    reader.readAsDataURL(file)
+  })
+}
+
+export default function AccessDialog({ configured, currentUser, ownerRegistrationAvailable, onClose, onAuthenticated, onClear, onWorkspaceChange, onLanguageChange, onAvatarChange }: Props) {
   const { language, setLanguage, t } = useI18n()
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [workspaceName, setWorkspaceName] = useState('')
   const [busy, setBusy] = useState(false)
+  const [avatarBusy, setAvatarBusy] = useState(false)
   const [error, setError] = useState('')
+  const avatarInput = useRef<HTMLInputElement>(null)
+
+  const updateAvatar = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    setAvatarBusy(true)
+    setError('')
+    try {
+      await onAvatarChange(await prepareAvatar(file))
+    } catch (reason) {
+      if (reason instanceof Error && reason.message === 'unsupported') setError(t('account.avatarUnsupported'))
+      else if (reason instanceof Error && reason.message === 'too-large') setError(t('account.avatarTooLarge'))
+      else setError(reason instanceof Error && !['unreadable'].includes(reason.message) ? reason.message : t('account.avatarUnreadable'))
+    } finally {
+      setAvatarBusy(false)
+    }
+  }
+
+  const removeAvatar = async () => {
+    setAvatarBusy(true)
+    setError('')
+    try {
+      await onAvatarChange(null)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason))
+    } finally {
+      setAvatarBusy(false)
+    }
+  }
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
@@ -51,10 +131,15 @@ export default function AccessDialog({ configured, currentUser, ownerRegistratio
       {configured && currentUser ? <>
         <h2>{t('account.title')}</h2>
         <p>{t('account.description')}</p>
+        <div className="account-profile-photo">
+          <span className="account-avatar" aria-hidden="true">{currentUser.avatar_data_url ? <img src={currentUser.avatar_data_url} alt="" /> : <UserRound size={28} />}</span>
+          <div><strong>{t('account.avatarTitle')}</strong><span>{t('account.avatarHint')}</span><div className="account-avatar-actions"><input ref={avatarInput} className="file-input" type="file" accept="image/png,image/jpeg,image/webp" onChange={event => void updateAvatar(event)} /><button className="secondary-btn" type="button" disabled={avatarBusy} onClick={() => avatarInput.current?.click()}><Camera size={15} />{avatarBusy ? t('account.avatarSaving') : t('account.avatarChoose')}</button>{currentUser.avatar_data_url && <button className="secondary-btn" type="button" disabled={avatarBusy} onClick={() => void removeAvatar()}><Trash2 size={15} />{t('account.avatarRemove')}</button>}</div></div>
+        </div>
         <div className="account-identity"><Mail size={17} /><div><small>{t('account.signedInAs')}</small><strong>{currentUser.email}</strong></div></div>
         <label>{t('account.workspace')}<select value={currentUser.active_workspace_id} onChange={event => onWorkspaceChange(event.target.value)}>{currentUser.workspaces.map(workspace => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}</select></label>
         <label>{t('account.language')}<select value={language} onChange={event => void onLanguageChange(event.target.value as Language)}><option value="pt-BR">Português (Brasil)</option><option value="en-US">English (United States)</option></select><small className="account-field-hint">{t('account.languageHint')}</small></label>
         {currentUser.workspaces.find(workspace => workspace.id === currentUser.active_workspace_id) && <div className="account-role"><ShieldCheck size={16} /><div><strong>{t(`role.${currentUser.workspaces.find(workspace => workspace.id === currentUser.active_workspace_id)!.role}` as TranslationKey)}</strong><span>{t(`role.${currentUser.workspaces.find(workspace => workspace.id === currentUser.active_workspace_id)!.role}Description` as TranslationKey)}</span></div></div>}
+        {error && <div className="error-box">{error}</div>}
         <button className="secondary-btn account-signout" onClick={() => void onClear()}><LogOut size={16} />{t('access.signOut')}</button>
       </> : <>
         <h2>{t('access.title')}</h2>

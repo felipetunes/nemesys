@@ -39,3 +39,24 @@ def test_unversioned_database_without_language_starts_from_previous_revision(mon
     migrations.upgrade_database(object(), "sqlite:///legacy.db")  # type: ignore[arg-type]
 
     assert calls == [("stamp", "20260901_0006"), ("upgrade", "head")]
+
+
+def test_unversioned_database_with_language_starts_before_avatar_revision(monkeypatch):
+    calls: list[tuple[str, str]] = []
+    inspector = LegacyInspector()
+    original_get_columns = inspector.get_columns
+
+    def get_columns(table_name: str) -> list[dict[str, str]]:
+        columns = original_get_columns(table_name)
+        if table_name == "users":
+            columns.append({"name": "language"})
+        return columns
+
+    monkeypatch.setattr(inspector, "get_columns", get_columns)
+    monkeypatch.setattr(migrations, "inspect", lambda _engine: inspector)
+    monkeypatch.setattr(migrations.command, "stamp", lambda _config, revision: calls.append(("stamp", revision)))
+    monkeypatch.setattr(migrations.command, "upgrade", lambda _config, revision: calls.append(("upgrade", revision)))
+
+    migrations.upgrade_database(object(), "sqlite:///legacy.db")  # type: ignore[arg-type]
+
+    assert calls == [("stamp", "20260901_0007"), ("upgrade", "head")]

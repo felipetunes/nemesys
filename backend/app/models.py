@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import binascii
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 
@@ -354,6 +356,7 @@ class AuthTokenResponse(StrictModel):
     user_id: str
     email: str
     language: SupportedLanguage
+    avatar_data_url: str | None = None
     workspaces: list[WorkspaceInfo]
 
 
@@ -361,12 +364,57 @@ class AuthMe(StrictModel):
     user_id: str
     email: str
     language: SupportedLanguage
+    avatar_data_url: str | None = None
     active_workspace_id: str
     workspaces: list[WorkspaceInfo]
 
 
 class UserProfileUpdate(StrictModel):
-    language: SupportedLanguage
+    language: SupportedLanguage | None = None
+    avatar_data_url: str | None = Field(default=None, max_length=700_000)
+
+    @field_validator("avatar_data_url")
+    @classmethod
+    def validate_avatar_data_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        allowed_headers = {
+            "data:image/jpeg;base64,",
+            "data:image/png;base64,",
+            "data:image/webp;base64,",
+        }
+        header, separator, encoded = value.partition(",")
+        if not separator or f"{header}," not in allowed_headers:
+            raise ValueError("Avatar must be a PNG, JPEG, or WebP data URL")
+        try:
+            decoded = base64.b64decode(encoded, validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise ValueError("Avatar contains invalid base64 data") from exc
+        if not decoded:
+            raise ValueError("Avatar cannot be empty")
+        if len(decoded) > 512 * 1024:
+            raise ValueError("Avatar must not exceed 512 KiB")
+        signature_is_valid = (
+            (header == "data:image/png;base64" and decoded.startswith(b"\x89PNG\r\n\x1a\n"))
+            or (header == "data:image/jpeg;base64" and decoded.startswith(b"\xff\xd8\xff"))
+            or (
+                header == "data:image/webp;base64"
+                and decoded.startswith(b"RIFF")
+                and len(decoded) >= 12
+                and decoded[8:12] == b"WEBP"
+            )
+        )
+        if not signature_is_valid:
+            raise ValueError("Avatar data does not match its declared image format")
+        return value
+
+    @model_validator(mode="after")
+    def require_profile_change(self) -> UserProfileUpdate:
+        if not self.model_fields_set:
+            raise ValueError("At least one profile field must be provided")
+        if "language" in self.model_fields_set and self.language is None:
+            raise ValueError("Language cannot be null")
+        return self
 
 
 class WorkspaceRow(Base):
@@ -385,6 +433,7 @@ class UserRow(Base):
     email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(500))
     language: Mapped[str] = mapped_column(String(10), default="pt-BR")
+    avatar_data_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     failed_login_attempts: Mapped[int] = mapped_column(Integer, default=0)
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

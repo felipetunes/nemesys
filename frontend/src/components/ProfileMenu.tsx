@@ -53,13 +53,13 @@ export default function ProfileMenu({ currentUser, onOpenSettings, onOpenHelp, o
       title={t('profile.openMenu')}
       onClick={() => setOpen(value => !value)}
     >
-      <span className="profile-avatar" aria-hidden="true">{currentUser ? initials(currentUser.email) : <UserRound size={18} />}</span>
+      <span className="profile-avatar" aria-hidden="true">{currentUser?.avatar_data_url ? <img src={currentUser.avatar_data_url} alt="" /> : currentUser ? initials(currentUser.email) : <UserRound size={18} />}</span>
       <span className="profile-presence" aria-hidden="true" />
     </button>
 
     {open && <div className="profile-popover panel" role="menu" aria-label={t('profile.menuLabel')}>
       <div className="profile-summary">
-        <span className="profile-avatar profile-avatar--large" aria-hidden="true">{currentUser ? initials(currentUser.email) : <UserRound size={20} />}</span>
+        <span className="profile-avatar profile-avatar--large" aria-hidden="true">{currentUser?.avatar_data_url ? <img src={currentUser.avatar_data_url} alt="" /> : currentUser ? initials(currentUser.email) : <UserRound size={20} />}</span>
         <div>
           <strong>{currentUser?.email || t('authPortal.demoMode')}</strong>
           <span>{workspace ? `${workspace.name} · ${t(`role.${workspace.role}` as TranslationKey)}` : t('profile.demoDescription')}</span>

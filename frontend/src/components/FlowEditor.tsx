@@ -12,7 +12,7 @@ import {
   type Node,
   type ReactFlowInstance,
 } from '@xyflow/react'
-import { AlignVerticalJustifyCenter, Bot, ChevronDown, CircleCheck, CircleStop, Download, FileUp, Flag, GitBranch, Headphones, MessageSquareText, MousePointerClick, Play, PlayCircle, Plus, Save, ShieldCheck, Trash2, UploadCloud, Variable } from 'lucide-react'
+import { AlignVerticalJustifyCenter, Bot, ChevronDown, CircleCheck, CircleStop, Download, FileUp, Flag, GitBranch, Headphones, MessageSquareText, MousePointerClick, Play, PlayCircle, Plus, Redo2, Save, Search, ShieldCheck, Trash2, Undo2, UploadCloud, Variable, X } from 'lucide-react'
 import { layoutFlowVertically } from '../flowLayout'
 import { useI18n, type TranslationKey } from '../i18n'
 import IvrNode from './IvrNode'
@@ -82,6 +82,22 @@ function toRfNode(n: FlowNode): Node {
   return { id: n.id, type: 'ivr', position: { x: n.x, y: n.y }, data: { label: n.label, kind: n.type, config: n.config } }
 }
 
+interface EditorSnapshot {
+  nodes: Node[]
+  edges: Edge[]
+}
+
+function cloneSnapshot(nodes: Node[], edges: Edge[]): EditorSnapshot {
+  return {
+    nodes: nodes.map(node => ({ ...node, position: { ...node.position }, data: structuredClone(node.data) })),
+    edges: edges.map(edge => ({ ...edge, data: edge.data ? structuredClone(edge.data) : edge.data })),
+  }
+}
+
+function normalizeSearch(value: string): string {
+  return value.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase().trim()
+}
+
 export default function FlowEditor({ readOnly, flow, onSave, onValidate, onPublish, onExport, onImport, onTest, onDirtyChange, saving, validating, publishing, importing, publishedVersion }: Props) {
   const { t } = useI18n()
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>(layoutFlowVertically(flow.nodes, flow.edges).map(toRfNode))
@@ -90,14 +106,72 @@ export default function FlowEditor({ readOnly, flow, onSave, onValidate, onPubli
   )
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
+  const [toolboxQuery, setToolboxQuery] = useState('')
   const [collapsedGroups, setCollapsedGroups] = useState<Record<PaletteGroupId, boolean>>({ conversation: false, logic: false, resolution: false })
   const [dirty, setDirty] = useState(false)
+  const [historyCounts, setHistoryCounts] = useState({ undo: 0, redo: 0 })
   const importInput = useRef<HTMLInputElement>(null)
+  const nodesRef = useRef(nodes)
+  const edgesRef = useRef(edges)
+  const historyRef = useRef<{ past: EditorSnapshot[]; future: EditorSnapshot[] }>({ past: [], future: [] })
   const [toFlowPosition, setToFlowPosition] = useState<((position: { x: number; y: number }) => { x: number; y: number }) | null>(null)
   const [flowInstance, setFlowInstance] = useState<ReactFlowInstance<Node, Edge> | null>(null)
   const nodeTypes = useMemo(() => ({ ivr: IvrNode }), [])
   const selected = nodes.find(n => n.id === selectedId)
   const selectedEdge = edges.find(e => e.id === selectedEdgeId)
+
+  useEffect(() => {
+    nodesRef.current = nodes
+    edgesRef.current = edges
+  }, [edges, nodes])
+
+  const refreshHistoryCounts = useCallback(() => {
+    setHistoryCounts({ undo: historyRef.current.past.length, redo: historyRef.current.future.length })
+  }, [])
+
+  const recordHistory = useCallback(() => {
+    const history = historyRef.current
+    history.past.push(cloneSnapshot(nodesRef.current, edgesRef.current))
+    if (history.past.length > 50) history.past.shift()
+    history.future = []
+    refreshHistoryCounts()
+  }, [refreshHistoryCounts])
+
+  const clearHistory = useCallback(() => {
+    historyRef.current = { past: [], future: [] }
+    refreshHistoryCounts()
+  }, [refreshHistoryCounts])
+
+  const markDirty = useCallback(() => {
+    setDirty(true)
+    onDirtyChange(true)
+  }, [onDirtyChange])
+
+  const restoreSnapshot = useCallback((snapshot: EditorSnapshot) => {
+    const restored = cloneSnapshot(snapshot.nodes, snapshot.edges)
+    setNodes(restored.nodes)
+    setEdges(restored.edges)
+    setSelectedId(null)
+    setSelectedEdgeId(null)
+    markDirty()
+    window.requestAnimationFrame(() => void flowInstance?.fitView({ padding: 0.18, duration: 180 }))
+  }, [flowInstance, markDirty, setEdges, setNodes])
+
+  const undo = useCallback(() => {
+    const previous = historyRef.current.past.pop()
+    if (!previous) return
+    historyRef.current.future.push(cloneSnapshot(nodesRef.current, edgesRef.current))
+    restoreSnapshot(previous)
+    refreshHistoryCounts()
+  }, [refreshHistoryCounts, restoreSnapshot])
+
+  const redo = useCallback(() => {
+    const next = historyRef.current.future.pop()
+    if (!next) return
+    historyRef.current.past.push(cloneSnapshot(nodesRef.current, edgesRef.current))
+    restoreSnapshot(next)
+    refreshHistoryCounts()
+  }, [refreshHistoryCounts, restoreSnapshot])
 
   useEffect(() => {
     const protectDraft = (event: BeforeUnloadEvent) => {
@@ -111,28 +185,27 @@ export default function FlowEditor({ readOnly, flow, onSave, onValidate, onPubli
 
   const onConnect = useCallback((connection: Connection) => {
     if (readOnly) return
-    setDirty(true)
-    onDirtyChange(true)
+    recordHistory()
+    markDirty()
     setEdges(eds => addEdge({ ...connection, id: `e-${crypto.randomUUID()}`, type: 'smoothstep' }, eds))
-  }, [onDirtyChange, readOnly, setEdges])
+  }, [markDirty, readOnly, recordHistory, setEdges])
 
   const handleNodesChange = useCallback((changes: Parameters<typeof onNodesChange>[0]) => {
     if (changes.some(change => ['position', 'remove', 'add', 'replace'].includes(change.type))) {
-      setDirty(true)
-      onDirtyChange(true)
+      markDirty()
     }
     onNodesChange(changes)
-  }, [onDirtyChange, onNodesChange])
+  }, [markDirty, onNodesChange])
 
   const handleEdgesChange = useCallback((changes: Parameters<typeof onEdgesChange>[0]) => {
     if (changes.some(change => ['remove', 'add', 'replace'].includes(change.type))) {
-      setDirty(true)
-      onDirtyChange(true)
+      markDirty()
     }
     onEdgesChange(changes)
-  }, [onDirtyChange, onEdgesChange])
+  }, [markDirty, onEdgesChange])
 
   const addNode = (kind: NodeKind, position?: { x: number; y: number }) => {
+    recordHistory()
     const id = `${kind}-${crypto.randomUUID().slice(0, 8)}`
     const defaults: Record<NodeKind, Record<string, unknown>> = {
       start: {},
@@ -152,8 +225,7 @@ export default function FlowEditor({ readOnly, flow, onSave, onValidate, onPubli
       data: { label: t(nodeLabelKeys[kind]), kind, config: defaults[kind] },
     }
     setNodes(items => [...items, node])
-    setDirty(true)
-    onDirtyChange(true)
+    markDirty()
     setSelectedId(id)
     setSelectedEdgeId(null)
   }
@@ -167,12 +239,13 @@ export default function FlowEditor({ readOnly, flow, onSave, onValidate, onPubli
 
   const updateSelected = (field: 'label' | 'config', value: unknown) => {
     if (!selectedId) return
-    setDirty(true)
-    onDirtyChange(true)
+    recordHistory()
+    markDirty()
     setNodes(items => items.map(n => n.id === selectedId ? { ...n, data: { ...n.data, [field]: value } } : n))
   }
 
   const arrangeVertically = () => {
+    recordHistory()
     const currentNodes: FlowNode[] = nodes.map(node => ({
       id: node.id,
       type: node.data.kind as NodeKind,
@@ -184,15 +257,14 @@ export default function FlowEditor({ readOnly, flow, onSave, onValidate, onPubli
     const currentEdges = edges.map(edge => ({ id: edge.id, source: edge.source, target: edge.target }))
     const positions = new Map(layoutFlowVertically(currentNodes, currentEdges).map(node => [node.id, { x: node.x, y: node.y }]))
     setNodes(items => items.map(node => ({ ...node, position: positions.get(node.id) ?? node.position })))
-    setDirty(true)
-    onDirtyChange(true)
+    markDirty()
     window.requestAnimationFrame(() => void flowInstance?.fitView({ padding: 0.18, duration: 280 }))
   }
 
   const updateSelectedEdge = (condition: string) => {
     if (!selectedEdgeId) return
-    setDirty(true)
-    onDirtyChange(true)
+    recordHistory()
+    markDirty()
     setEdges(items => items.map(e => e.id === selectedEdgeId ? { ...e, label: condition || undefined, data: { ...(e.data || {}), condition: condition || null } } : e))
   }
 
@@ -201,16 +273,16 @@ export default function FlowEditor({ readOnly, flow, onSave, onValidate, onPubli
     if (selectedId) {
       const node = nodes.find(n => n.id === selectedId)
       if (node?.data.kind === 'start') return
+      recordHistory()
       setNodes(items => items.filter(n => n.id !== selectedId))
       setEdges(items => items.filter(e => e.source !== selectedId && e.target !== selectedId))
       setSelectedId(null)
-      setDirty(true)
-      onDirtyChange(true)
+      markDirty()
     } else if (selectedEdgeId) {
+      recordHistory()
       setEdges(items => items.filter(e => e.id !== selectedEdgeId))
       setSelectedEdgeId(null)
-      setDirty(true)
-      onDirtyChange(true)
+      markDirty()
     }
   }
 
@@ -240,6 +312,7 @@ export default function FlowEditor({ readOnly, flow, onSave, onValidate, onPubli
     if (await onSave(buildFlow())) {
       setDirty(false)
       onDirtyChange(false)
+      clearHistory()
     }
   }
 
@@ -247,6 +320,7 @@ export default function FlowEditor({ readOnly, flow, onSave, onValidate, onPubli
     if (await onPublish(buildFlow())) {
       setDirty(false)
       onDirtyChange(false)
+      clearHistory()
     }
   }
 
@@ -254,6 +328,7 @@ export default function FlowEditor({ readOnly, flow, onSave, onValidate, onPubli
     if (await onSave(buildFlow())) {
       setDirty(false)
       onDirtyChange(false)
+      clearHistory()
       onTest()
     }
   }
@@ -261,6 +336,19 @@ export default function FlowEditor({ readOnly, flow, onSave, onValidate, onPubli
   const handleEditorKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (readOnly) return
     const modifier = event.ctrlKey || event.metaKey
+    const target = event.target as HTMLElement
+    const isFormField = ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
+    if (modifier && !isFormField && event.key.toLowerCase() === 'z') {
+      event.preventDefault()
+      if (event.shiftKey) redo()
+      else undo()
+      return
+    }
+    if (modifier && !isFormField && event.key.toLowerCase() === 'y') {
+      event.preventDefault()
+      redo()
+      return
+    }
     if (modifier && event.key.toLowerCase() === 's') {
       event.preventDefault()
       void saveDraft()
@@ -271,8 +359,7 @@ export default function FlowEditor({ readOnly, flow, onSave, onValidate, onPubli
       void saveAndTest()
       return
     }
-    const target = event.target as HTMLElement
-    if ((event.key === 'Delete' || event.key === 'Backspace') && !['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) && (selectedId || selectedEdgeId)) {
+    if ((event.key === 'Delete' || event.key === 'Backspace') && !isFormField && (selectedId || selectedEdgeId)) {
       event.preventDefault()
       deleteSelection()
     }
@@ -284,22 +371,30 @@ export default function FlowEditor({ readOnly, flow, onSave, onValidate, onPubli
     return <button key={item.type} className="palette-btn" title={t(nodeDescriptionKeys[item.type])} draggable onDragStart={event => { event.dataTransfer.setData('application/nemesys-node-kind', item.type); event.dataTransfer.effectAllowed = 'copy' }} onClick={() => addNode(item.type)}><Icon size={16} /><span>{t(nodeLabelKeys[item.type])}</span></button>
   }
 
+  const normalizedToolboxQuery = normalizeSearch(toolboxQuery)
+  const visiblePaletteGroups = paletteGroups.map(group => ({
+    ...group,
+    types: group.types.filter(type => normalizeSearch(`${t(nodeLabelKeys[type])} ${t(nodeDescriptionKeys[type])} ${t(group.label)}`).includes(normalizedToolboxQuery)),
+  })).filter(group => group.types.length > 0)
+
   return (
     <div className="editor-layout" onKeyDown={handleEditorKeyDown}>
       <aside className="palette panel">
         <div className="section-title"><Plus size={15} /> {t('flow.toolbox')}</div>
         {readOnly ? <div className="editor-readonly-note"><ShieldCheck size={22} /><strong>{t('flow.readOnlyTitle')}</strong><span>{t('flow.readOnlyDescription')}</span></div> : <>
           <p className="palette-instruction">{t('flow.paletteInstruction')}</p>
-          {paletteGroups.map(group => {
+          <div className="toolbox-search"><Search size={14} /><input type="search" value={toolboxQuery} onChange={event => setToolboxQuery(event.target.value)} placeholder={t('flow.toolboxSearch')} aria-label={t('flow.toolboxSearch')} />{toolboxQuery && <button type="button" aria-label={t('flow.toolboxClear')} onClick={() => setToolboxQuery('')}><X size={13} /></button>}</div>
+          {visiblePaletteGroups.map(group => {
             const GroupIcon = group.icon
-            const collapsed = collapsedGroups[group.id]
+            const collapsed = !normalizedToolboxQuery && collapsedGroups[group.id]
             return <section className={`toolbox-group${collapsed ? ' collapsed' : ''}`} key={group.id}>
               <button className="toolbox-group-toggle" type="button" aria-expanded={!collapsed} onClick={() => setCollapsedGroups(current => ({ ...current, [group.id]: !current[group.id] }))}><GroupIcon size={14} /><strong>{t(group.label)}</strong><span>{group.types.length}</span><ChevronDown size={14} /></button>
               {!collapsed && <div className="palette-group">{group.types.map(renderPaletteButton)}</div>}
             </section>
           })}
+          {visiblePaletteGroups.length === 0 && <div className="toolbox-empty"><Search size={18} /><span>{t('flow.toolboxNoResults', { query: toolboxQuery })}</span></div>}
           <div className="palette-note"><Play size={14} /> {t('flow.paletteNote')}</div>
-          <div className="editor-shortcuts"><span>{t('flow.shortcuts')}</span><div><kbd>Ctrl</kbd><kbd>S</kbd>{t('flow.shortcutSave')}</div><div><kbd>Ctrl</kbd><kbd>Enter</kbd>{t('flow.shortcutTest')}</div></div>
+          <div className="editor-shortcuts"><span>{t('flow.shortcuts')}</span><div><kbd>Ctrl</kbd><kbd>Z</kbd>{t('flow.shortcutUndo')}</div><div><kbd>Ctrl</kbd><kbd>S</kbd>{t('flow.shortcutSave')}</div><div><kbd>Ctrl</kbd><kbd>Enter</kbd>{t('flow.shortcutTest')}</div></div>
         </>}
       </aside>
 
@@ -320,6 +415,7 @@ export default function FlowEditor({ readOnly, flow, onSave, onValidate, onPubli
             />
             {!readOnly && <button className="secondary-btn toolbar-file-action" title={t('flow.import')} disabled={saving || publishing || importing} onClick={() => importInput.current?.click()}><FileUp size={16} /><span className="button-label">{t('flow.importShort')}</span></button>}
             <button className="secondary-btn toolbar-file-action" title={t('flow.export')} disabled={saving || publishing || importing} onClick={() => onExport(buildFlow())}><Download size={16} /><span className="button-label">{t('flow.exportShort')}</span></button>
+            {!readOnly && <div className="history-actions" role="group" aria-label={t('flow.historyActions')}><button className="secondary-btn" type="button" title={t('flow.undoTitle')} disabled={historyCounts.undo === 0 || saving || publishing || importing} onClick={undo}><Undo2 size={16} /><span className="sr-only">{t('flow.undo')}</span></button><button className="secondary-btn" type="button" title={t('flow.redoTitle')} disabled={historyCounts.redo === 0 || saving || publishing || importing} onClick={redo}><Redo2 size={16} /><span className="sr-only">{t('flow.redo')}</span></button></div>}
             {!readOnly && <button className="secondary-btn toolbar-file-action" title={t('flow.layoutVerticalTitle')} disabled={saving || validating || publishing || importing} onClick={arrangeVertically}><AlignVerticalJustifyCenter size={16} /><span className="button-label">{t('flow.layoutVertical')}</span></button>}
             <button className="secondary-btn" disabled={saving || validating || publishing || importing} onClick={() => void onValidate(buildFlow())}><CircleCheck size={16} />{validating ? t('flow.validating') : t('flow.validate')}</button>
             {!readOnly && <button className="secondary-btn" title={t('flow.shortcutSaveTitle')} disabled={saving || validating || publishing || importing} onClick={() => void saveDraft()}><Save size={16} />{saving ? t('flow.saving') : t('flow.saveDraft')}</button>}
@@ -334,6 +430,7 @@ export default function FlowEditor({ readOnly, flow, onSave, onValidate, onPubli
             onNodesChange={handleNodesChange}
             onEdgesChange={handleEdgesChange}
             onConnect={onConnect}
+            onNodeDragStart={() => recordHistory()}
             onInit={instance => {
               setFlowInstance(instance)
               setToFlowPosition(() => (position: { x: number; y: number }) => instance.screenToFlowPosition(position))

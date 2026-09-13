@@ -36,7 +36,9 @@ def upgrade_database(engine: Engine, database_url: str) -> None:
                     }
                     if "active" not in membership_columns:
                         revision = "20260901_0005"
+                    elif "language" not in user_columns:
+                        revision = "20260901_0006"
                     else:
-                        revision = "head" if "language" in user_columns else "20260901_0006"
+                        revision = "head" if "avatar_data_url" in user_columns else "20260901_0007"
         command.stamp(config, revision)
     command.upgrade(config, "head")

@@ -4,7 +4,7 @@
 [![Release](https://img.shields.io/github/v/release/felipetunes/nemesys)](https://github.com/felipetunes/nemesys/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-7c5cff.svg)](LICENSE)
 
-**Current project version: `0.16.0` — focused profile navigation and vertical Architect flows**
+**Current project version: `0.17.0` — personal profiles and faster Architect editing**
 
 **A visual, AI-assisted IVR flow builder and runtime for learning, prototyping and portfolio demos.**
 

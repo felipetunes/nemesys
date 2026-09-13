@@ -391,6 +391,64 @@ async def test_user_language_is_persisted_in_profile(api_client, monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_user_avatar_is_validated_persisted_and_removable(api_client, monkeypatch):
+    client, _ = api_client
+    monkeypatch.setenv("AUTH_REQUIRED", "true")
+    get_settings.cache_clear()
+    avatar = "data:image/png;base64,iVBORw0KGgo="
+    try:
+        registered = await client.post(
+            "/api/auth/register",
+            json={
+                "email": "avatar-owner@example.com",
+                "password": "correct horse battery staple",
+                "workspace_name": "Avatar Support",
+                "language": "pt-BR",
+            },
+        )
+        registration = registered.json()
+        headers = {
+            "Authorization": f"Bearer {registration['token']}",
+            "X-Workspace-ID": registration["workspaces"][0]["id"],
+        }
+        updated = await client.patch("/api/auth/me", json={"avatar_data_url": avatar}, headers=headers)
+        audit = await client.get("/api/operations/audit", headers=headers)
+        invalid = await client.patch(
+            "/api/auth/me",
+            json={"avatar_data_url": "data:image/svg+xml;base64,PHN2Zz4="},
+            headers=headers,
+        )
+        spoofed = await client.patch(
+            "/api/auth/me",
+            json={"avatar_data_url": "data:image/png;base64,SGVsbG8="},
+            headers=headers,
+        )
+        empty = await client.patch("/api/auth/me", json={}, headers=headers)
+        logged_in = await client.post(
+            "/api/auth/login",
+            json={"email": "avatar-owner@example.com", "password": "correct horse battery staple"},
+        )
+        removed = await client.patch("/api/auth/me", json={"avatar_data_url": None}, headers=headers)
+    finally:
+        get_settings.cache_clear()
+
+    assert registered.status_code == 201
+    assert registration["avatar_data_url"] is None
+    assert updated.status_code == 200
+    assert updated.json()["avatar_data_url"] == avatar
+    profile_event = next(event for event in audit.json() if event["action"] == "user.profile_updated")
+    assert profile_event["details"] == {"avatar_changed": True}
+    assert avatar not in str(profile_event)
+    assert invalid.status_code == 422
+    assert spoofed.status_code == 422
+    assert empty.status_code == 422
+    assert logged_in.status_code == 200
+    assert logged_in.json()["avatar_data_url"] == avatar
+    assert removed.status_code == 200
+    assert removed.json()["avatar_data_url"] is None
+
+
+@pytest.mark.anyio
 async def test_generic_telephony_adapter_is_idempotent(api_client):
     client, _ = api_client
     payload = {"provider_call_id": "generic-call-1", "flow_id": "demo-commerce"}
@@ -635,7 +693,7 @@ async def test_health_endpoints_and_security_headers(api_client):
     response = await client.get("/health/ready", headers={"X-Request-ID": "test-request-123"})
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ready", "version": "0.16.0"}
+    assert response.json() == {"status": "ready", "version": "0.17.0"}
     assert response.headers["x-request-id"] == "test-request-123"
     assert response.headers["x-content-type-options"] == "nosniff"
     assert response.headers["x-frame-options"] == "DENY"

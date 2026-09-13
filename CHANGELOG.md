@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.17.0 — 2026-09-01
+
+### Added
+
+- Persistent per-user profile photos with square browser-side cropping, safe format validation and removal controls.
+- Accent-insensitive action search across Architect toolbox names, descriptions and categories.
+- A 50-step flow-editing history with toolbar controls and familiar undo/redo keyboard shortcuts.
+- Database migration and API coverage for profile-photo persistence, validation and legacy-schema upgrades.
+
+### Changed
+
+- Profile audit events record only whether an avatar changed, never the encoded image data.
+- The editor keeps native text-field undo behavior while applying flow-level history to canvas operations.
+- Profile, search and history controls include Brazilian Portuguese and English labels and accessible names.
+
 ## 0.16.0 — 2026-09-01
 
 ### Added

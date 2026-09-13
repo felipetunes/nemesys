@@ -480,12 +480,17 @@ export default function App() {
       return
     }
     try {
-      const updatedUser = await api.updateProfileLanguage(nextLanguage)
+      const updatedUser = await api.updateProfile({ language: nextLanguage })
       setCurrentUser(updatedUser)
       setLanguage(updatedUser.language)
     } catch (error) {
       setActionError(error instanceof Error ? error.message : String(error))
     }
+  }
+
+  const changeAvatar = async (avatarDataUrl: string | null) => {
+    const updatedUser = await api.updateProfile({ avatar_data_url: avatarDataUrl })
+    setCurrentUser(updatedUser)
   }
 
   if (accessState === 'checking') return <div className="auth-loading"><LoaderCircle className="spin" /><strong>Nemesys</strong><span>{t('authPortal.checkingSession')}</span></div>
@@ -578,7 +583,7 @@ export default function App() {
 
         {visibleApplication === 'admin' && <Suspense fallback={<div className="loading"><LoaderCircle className="spin" />{t('users.loading')}</div>}><UserManagement key={accessRevision} /></Suspense>}
       </main>
-      {showAccess && <AccessDialog configured={hasManagementToken} currentUser={currentUser} ownerRegistrationAvailable={ownerRegistrationAvailable} onClose={() => setShowAccess(false)} onAuthenticated={() => void refreshAccess()} onClear={clearAccess} onWorkspaceChange={changeWorkspace} onLanguageChange={changeLanguage} />}
+      {showAccess && <AccessDialog configured={hasManagementToken} currentUser={currentUser} ownerRegistrationAvailable={ownerRegistrationAvailable} onClose={() => setShowAccess(false)} onAuthenticated={() => void refreshAccess()} onClear={clearAccess} onWorkspaceChange={changeWorkspace} onLanguageChange={changeLanguage} onAvatarChange={changeAvatar} />}
       {showHelp && <HelpCenter canAdminister={canAdminister} canEdit={canEdit} hasFlow={Boolean(flow)} onNavigate={navigateToLearningDestination} onClose={() => setShowHelp(false)} />}
     </div>
   )

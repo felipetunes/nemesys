@@ -116,6 +116,7 @@ export interface AuthMe {
   user_id: string
   email: string
   language: 'pt-BR' | 'en-US'
+  avatar_data_url: string | null
   active_workspace_id: string
   workspaces: WorkspaceInfo[]
 }
@@ -126,6 +127,7 @@ export interface AuthTokenResponse {
   user_id: string
   email: string
   language: 'pt-BR' | 'en-US'
+  avatar_data_url: string | null
   workspaces: WorkspaceInfo[]
 }
 

@@ -275,12 +275,24 @@ class AuthService:
         self.db.commit()
         return self._workspace_member(user, role, active=membership.active)
 
-    def update_language(self, user_id: str, language: SupportedLanguage) -> None:
+    def update_profile(
+        self,
+        user_id: str,
+        *,
+        language: SupportedLanguage | None = None,
+        avatar_data_url: str | None = None,
+        update_avatar: bool = False,
+    ) -> UserRow:
         user = self.db.get(UserRow, user_id)
         if user is None:
             raise AuthError("User not found")
-        user.language = language
+        if language is not None:
+            user.language = language
+        if update_avatar:
+            user.avatar_data_url = avatar_data_url
         self.db.commit()
+        self.db.refresh(user)
+        return user
 
     def set_workspace_member_active(
         self,
@@ -343,6 +355,7 @@ class AuthService:
             user_id=user_id,
             email=email,
             language=cast(SupportedLanguage, user.language),
+            avatar_data_url=user.avatar_data_url,
             workspaces=self.workspaces_for_user(user_id),
         )
 

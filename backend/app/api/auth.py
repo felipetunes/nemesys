@@ -93,6 +93,7 @@ def me(
             user_id="admin",
             email="admin",
             language="pt-BR",
+            avatar_data_url=None,
             active_workspace_id=access.workspace_id,
             workspaces=[WorkspaceInfo(id=access.workspace_id, name=access.workspace_id, role="admin")],
         )
@@ -103,6 +104,7 @@ def me(
         user_id=access.user_id,
         email=access.email or "",
         language=cast(SupportedLanguage, user.language),
+        avatar_data_url=user.avatar_data_url,
         active_workspace_id=access.workspace_id,
         workspaces=AuthService(db).workspaces_for_user(access.user_id),
     )
@@ -117,20 +119,31 @@ def update_profile(
     if access.user_id is None:
         raise HTTPException(status_code=403, detail="Operator tokens do not have a user profile")
     try:
-        AuthService(db).update_language(access.user_id, payload.language)
+        user = AuthService(db).update_profile(
+            access.user_id,
+            language=payload.language,
+            avatar_data_url=payload.avatar_data_url,
+            update_avatar="avatar_data_url" in payload.model_fields_set,
+        )
     except AuthError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    audit_details: dict[str, object] = {}
+    if "language" in payload.model_fields_set:
+        audit_details["language"] = payload.language
+    if "avatar_data_url" in payload.model_fields_set:
+        audit_details["avatar_changed"] = payload.avatar_data_url is not None
     AuditService(db, access.workspace_id).record(
         actor=access.email or access.user_id,
         action="user.profile_updated",
         resource_type="user",
         resource_id=access.user_id,
-        details={"language": payload.language},
+        details=audit_details,
     )
     return AuthMe(
         user_id=access.user_id,
         email=access.email or "",
-        language=payload.language,
+        language=cast(SupportedLanguage, user.language),
+        avatar_data_url=user.avatar_data_url,
         active_workspace_id=access.workspace_id,
         workspaces=AuthService(db).workspaces_for_user(access.user_id),
     )
